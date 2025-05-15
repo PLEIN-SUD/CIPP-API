@@ -57,14 +57,14 @@ function Invoke-CIPPStandardAntiPhishPolicy {
     $MDOLicensed = $ServicePlans -contains "ATP_ENTERPRISE"
     Write-Information "MDOLicensed: $MDOLicensed"
 
-    $PolicyList = @('PSIT MCS - Default Anti-Phishing Policy','Default Anti-Phishing Policy')
+    $PolicyList = @('Plein Sud IT - Default Anti-Phishing Policy','Default Anti-Phishing Policy')
     $ExistingPolicy = New-ExoRequest -tenantid $Tenant -cmdlet 'Get-AntiPhishPolicy' | Where-Object -Property Name -In $PolicyList
     if ($null -eq $ExistingPolicy.Name) {
         $PolicyName = $PolicyList[0]
     } else {
         $PolicyName = $ExistingPolicy.Name
     }
-    $RuleList = @( 'CIPP Default Anti-Phishing Rule','PSIT MCS - Default Anti-Phishing Policy')
+    $RuleList = @( 'CIPP Default Anti-Phishing Rule','Plein Sud IT - Default Anti-Phishing Policy')
     $ExistingRule = New-ExoRequest -tenantid $Tenant -cmdlet 'Get-AntiPhishRule' | Where-Object -Property Name -In $RuleList
     if ($null -eq $ExistingRule.Name) {
         $RuleName = $RuleList[0]
