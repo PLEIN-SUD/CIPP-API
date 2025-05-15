@@ -97,6 +97,8 @@ function Invoke-CIPPStandardAntiPhishPolicy {
                           ($CurrentState.TargetedDomainProtectionAction -eq $Settings.TargetedDomainProtectionAction) -and
                           ($CurrentState.TargetedDomainQuarantineTag -eq $Settings.TargetedDomainQuarantineTag) -and
                           ($CurrentState.EnableOrganizationDomainsProtection -eq $true)
+                          ($CurrentState.Comments -eq "Politique antiphishing standard par Plein Sud IT. Ne pas modifier sans autorisation.")
+                          
     } else {
         $StateIsCorrect = ($CurrentState.Name -eq $PolicyName) -and
                           ($CurrentState.Enabled -eq $true) -and
@@ -106,6 +108,7 @@ function Invoke-CIPPStandardAntiPhishPolicy {
                           ($CurrentState.EnableViaTag -eq $true) -and
                           ($CurrentState.AuthenticationFailAction -eq $Settings.AuthenticationFailAction) -and
                           ($CurrentState.SpoofQuarantineTag -eq $Settings.SpoofQuarantineTag)
+                          ($CurrentState.Comments -eq "Politique antiphishing standard par Plein Sud IT. Ne pas modifier sans autorisation.")
     }
 
     $AcceptedDomains = New-ExoRequest -tenantid $Tenant -cmdlet 'Get-AcceptedDomain'
