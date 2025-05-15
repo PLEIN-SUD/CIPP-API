@@ -43,14 +43,14 @@ function Invoke-CIPPStandardSafeAttachmentPolicy {
     $MDOLicensed = $ServicePlans -contains 'ATP_ENTERPRISE'
 
     if ($MDOLicensed) {
-        $PolicyList = @('CIPP Default Safe Attachment Policy', 'Default Safe Attachment Policy')
+        $PolicyList = @('Plein Sud IT - Default Safe Attachment Policy', 'Default Safe Attachment Policy')
         $ExistingPolicy = New-ExoRequest -tenantid $Tenant -cmdlet 'Get-SafeAttachmentPolicy' | Where-Object -Property Name -In $PolicyList
         if ($null -eq $ExistingPolicy.Name) {
             $PolicyName = $PolicyList[0]
         } else {
             $PolicyName = $ExistingPolicy.Name
         }
-        $RuleList = @( 'CIPP Default Safe Attachment Rule', 'CIPP Default Safe Attachment Policy')
+        $RuleList = @( 'CIPP Default Safe Attachment Rule', 'Plein Sud IT - Default Safe Attachment Policy')
         $ExistingRule = New-ExoRequest -tenantid $Tenant -cmdlet 'Get-SafeAttachmentRule' | Where-Object -Property Name -In $RuleList
         if ($null -eq $ExistingRule.Name) {
             $RuleName = $RuleList[0]
