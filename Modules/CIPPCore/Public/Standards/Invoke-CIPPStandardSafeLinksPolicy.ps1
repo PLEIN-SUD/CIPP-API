@@ -42,14 +42,14 @@ function Invoke-CIPPStandardSafeLinksPolicy {
     $MDOLicensed = $ServicePlans -contains 'ATP_ENTERPRISE'
 
     if ($MDOLicensed) {
-        $PolicyList = @('CIPP Default SafeLinks Policy', 'Default SafeLinks Policy')
+        $PolicyList = @('PSIT MCS - Default SafeLinks Policy', 'Default SafeLinks Policy')
         $ExistingPolicy = New-ExoRequest -tenantid $Tenant -cmdlet 'Get-SafeLinksPolicy' | Where-Object -Property Name -In $PolicyList
         if ($null -eq $ExistingPolicy.Name) {
             $PolicyName = $PolicyList[0]
         } else {
             $PolicyName = $ExistingPolicy.Name
         }
-        $RuleList = @( 'CIPP Default SafeLinks Rule', 'CIPP Default SafeLinks Policy')
+        $RuleList = @( 'CIPP Default SafeLinks Rule', 'PSIT MCS - Default SafeLinks Policy')
         $ExistingRule = New-ExoRequest -tenantid $Tenant -cmdlet 'Get-SafeLinksRule' | Where-Object -Property Name -In $RuleList
         if ($null -eq $ExistingRule.Name) {
             $RuleName = $RuleList[0]
