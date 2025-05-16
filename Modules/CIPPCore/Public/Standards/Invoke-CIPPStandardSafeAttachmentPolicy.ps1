@@ -67,6 +67,7 @@ function Invoke-CIPPStandardSafeAttachmentPolicy {
         ($CurrentState.Action -eq $Settings.SafeAttachmentAction) -and
         ($CurrentState.QuarantineTag -eq $Settings.QuarantineTag) -and
         ($CurrentState.Redirect -eq $Settings.Redirect) -and
+        ($CurrentState.AdminDisplayName -eq "Politique SafeAttachments standard par Plein Sud IT. Ne pas modifier sans autorisation.") -and
         (($null -eq $Settings.RedirectAddress) -or ($CurrentState.RedirectAddress -eq $Settings.RedirectAddress))
 
         $AcceptedDomains = New-ExoRequest -tenantid $Tenant -cmdlet 'Get-AcceptedDomain'
@@ -91,6 +92,7 @@ function Invoke-CIPPStandardSafeAttachmentPolicy {
                     QuarantineTag   = $Settings.QuarantineTag
                     Redirect        = $Settings.Redirect
                     RedirectAddress = $Settings.RedirectAddress
+                    AdminDisplayName = "Politique SafeLinks standard par Plein Sud IT. Ne pas modifier sans autorisation."
                 }
 
                 if ($CurrentState.Name -eq $PolicyName) {
