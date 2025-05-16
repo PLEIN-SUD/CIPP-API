@@ -96,7 +96,7 @@ function Invoke-CIPPStandardAntiPhishPolicy {
                           ($CurrentState.TargetedUserQuarantineTag -eq $Settings.TargetedUserQuarantineTag) -and
                           ($CurrentState.TargetedDomainProtectionAction -eq $Settings.TargetedDomainProtectionAction) -and
                           ($CurrentState.TargetedDomainQuarantineTag -eq $Settings.TargetedDomainQuarantineTag) -and
-                          ($CurrentState.EnableOrganizationDomainsProtection -eq $true)
+                          ($CurrentState.EnableOrganizationDomainsProtection -eq $true) -and
                           ($CurrentState.Comments -eq "Politique antiphishing standard par Plein Sud IT. Ne pas modifier sans autorisation.")
                           
     } else {
@@ -107,7 +107,7 @@ function Invoke-CIPPStandardAntiPhishPolicy {
                           ($CurrentState.EnableUnauthenticatedSender -eq $true) -and
                           ($CurrentState.EnableViaTag -eq $true) -and
                           ($CurrentState.AuthenticationFailAction -eq $Settings.AuthenticationFailAction) -and
-                          ($CurrentState.SpoofQuarantineTag -eq $Settings.SpoofQuarantineTag)
+                          ($CurrentState.SpoofQuarantineTag -eq $Settings.SpoofQuarantineTag) -and
                           ($CurrentState.Comments -eq "Politique antiphishing standard par Plein Sud IT. Ne pas modifier sans autorisation.")
     }
 
