@@ -148,7 +148,7 @@ function Invoke-CIPPStandardAntiPhishPolicy {
                     TargetedDomainProtectionAction      = $Settings.TargetedDomainProtectionAction
                     TargetedDomainQuarantineTag         = $Settings.TargetedDomainQuarantineTag
                     EnableOrganizationDomainsProtection = $true
-                    Comments                            = "Politique antiphishing standard par Plein Sud IT. Ne pas modifier sans autorisation."
+                    AdminDisplayName                    = "Politique antiphishing standard par Plein Sud IT. Ne pas modifier sans autorisation."
                 }
             } else {
                 $cmdParams = @{
@@ -159,7 +159,7 @@ function Invoke-CIPPStandardAntiPhishPolicy {
                     EnableViaTag                        = $true
                     AuthenticationFailAction            = $Settings.AuthenticationFailAction
                     SpoofQuarantineTag                  = $Settings.SpoofQuarantineTag
-                    Comments                            = "Politique antiphishing standard par Plein Sud IT. Ne pas modifier sans autorisation."
+                    AdminDisplayName                    = "Politique antiphishing standard par Plein Sud IT. Ne pas modifier sans autorisation."
                 }
             }
 
