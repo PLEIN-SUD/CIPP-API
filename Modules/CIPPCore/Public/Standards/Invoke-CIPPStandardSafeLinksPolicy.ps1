@@ -49,7 +49,7 @@ function Invoke-CIPPStandardSafeLinksPolicy {
         } else {
             $PolicyName = $ExistingPolicy.Name
         }
-        $RuleList = @( 'CIPP Default SafeLinks Rule', 'Plein Sud IT - Default SafeLinks Policy')
+        $RuleList = @( 'Plein Sud IT - Default SafeLinks Rule', 'Plein Sud IT - Default SafeLinks Policy')
         $ExistingRule = New-ExoRequest -tenantid $Tenant -cmdlet 'Get-SafeLinksRule' | Where-Object -Property Name -In $RuleList
         if ($null -eq $ExistingRule.Name) {
             $RuleName = $RuleList[0]
@@ -72,6 +72,7 @@ function Invoke-CIPPStandardSafeLinksPolicy {
         ($CurrentState.AllowClickThrough -eq $Settings.AllowClickThrough) -and
         ($CurrentState.DisableUrlRewrite -eq $Settings.DisableUrlRewrite) -and
         ($CurrentState.EnableOrganizationBranding -eq $Settings.EnableOrganizationBranding) -and
+        ($CurrentState.AdminDisplayName -eq "Politique SafeLinks standard par Plein Sud IT. Ne pas modifier sans autorisation.") -and
         (!(Compare-Object -ReferenceObject $CurrentState.DoNotRewriteUrls -DifferenceObject ($Settings.DoNotRewriteUrls.value ?? $Settings.DoNotRewriteUrls ?? @())))
 
         $AcceptedDomains = New-ExoRequest -tenantid $Tenant -cmdlet 'Get-AcceptedDomain'
@@ -102,6 +103,7 @@ function Invoke-CIPPStandardSafeLinksPolicy {
                     DisableUrlRewrite          = $Settings.DisableUrlRewrite
                     EnableOrganizationBranding = $Settings.EnableOrganizationBranding
                     DoNotRewriteUrls           = $Settings.DoNotRewriteUrls.value ?? @{'@odata.type' = '#Exchange.GenericHashTable' }
+                    AdminDisplayName           = "Politique SafeLinks standard par Plein Sud IT. Ne pas modifier sans autorisation."
                 }
 
                 if ($CurrentState.Name -eq $Policyname) {
