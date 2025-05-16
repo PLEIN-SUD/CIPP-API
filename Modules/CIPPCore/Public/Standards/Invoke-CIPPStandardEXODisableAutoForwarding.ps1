@@ -33,21 +33,12 @@ function Invoke-CIPPStandardEXODisableAutoForwarding {
     #>
 
     param($Tenant, $Settings)
+    ##$Rerun -Type Standard -Tenant $Tenant -Settings $Settings 'EXODisableAutoForwarding'
 
-    $CurrentInfo = New-ExoRequest -tenantid $Tenant -cmdlet 'Get-HostedOutboundSpamFilterPolicy' -cmdParams @{ Identity = 'Default' } -useSystemMailbox $true
+    $CurrentInfo = New-ExoRequest -tenantid $Tenant -cmdlet 'Get-HostedOutboundSpamFilterPolicy' -cmdParams @{Identity = 'Default' } -useSystemMailbox $true
     $StateIsCorrect = $CurrentInfo.AutoForwardingMode -eq 'Off'
 
-    # Récupération des politiques et règles existantes
-    $Policies = New-ExoRequest -tenantid $Tenant -cmdlet 'Get-HostedOutboundSpamFilterPolicy' -cmdParams @{} -useSystemMailbox $true
-    $Rules    = New-ExoRequest -tenantid $Tenant -cmdlet 'Get-HostedOutboundSpamFilterRule' -cmdParams @{} -useSystemMailbox $true
-
-    $AutoForwardPolicyExists = $Policies | Where-Object { $_.Name -eq 'PleinSudIT - AutoForward Outbound Rule' }
-    $AntiSpamPolicyExists    = $Policies | Where-Object { $_.Name -eq 'PleinSudIT - AntiSpam Outbound Rule Standard' }
-
-    $AutoForwardRuleExists = $Rules | Where-Object { $_.Name -eq 'PleinSudIT - AutoForward Outbound Rule' }
-    $AntiSpamRuleExists    = $Rules | Where-Object { $_.Name -eq 'PleinSudIT - AntiSpam Outbound Rule Standard' }
-
-    if ($Settings.remediate -eq $true) {
+    If ($Settings.remediate -eq $true) {
 
         try {
             New-ExoRequest -tenantid $tenant -cmdlet 'Set-HostedOutboundSpamFilterPolicy' -cmdParams @{ Identity = 'Default'; AutoForwardingMode = 'Off' } -useSystemMailbox $true
@@ -56,65 +47,11 @@ function Invoke-CIPPStandardEXODisableAutoForwarding {
             $ErrorMessage = Get-CippException -Exception $_
             Write-LogMessage -API 'Standards' -tenant $tenant -message "Could not disable auto forwarding. $($ErrorMessage.NormalizedError)" -sev Error
         }
-
-        if (-not $AutoForwardPolicyExists -and -not $AutoForwardRuleExists) {
-            try {
-                New-ExoRequest -tenantid $tenant -cmdlet 'New-HostedOutboundSpamFilterPolicy' -cmdParams @{
-                    Name                         = 'PleinSudIT - AutoForward Outbound Rule'
-                    AutoForwardingEnabled        = 'On'
-                    RecipientLimitPerHour        = 1000
-                    ExternalRecipientLimitPerHour = 500
-                    DailyRecipientLimit          = 1000
-                    ActionWhenThresholdReached   = 'BlockUser'
-                } -useSystemMailbox $true
-
-                New-ExoRequest -tenantid $tenant -cmdlet 'New-HostedOutboundSpamFilterRule' -cmdParams @{
-                    Name                         = 'PleinSudIT - AutoForward Outbound Rule'
-                    Priority                     = 0
-                    Enabled                      = $true
-                    SentToMemberOf               = 'gp_autoforward_Allow@defaultdomain.com'
-                    HostedOutboundSpamFilterPolicy = 'PleinSudIT - AutoForward Outbound Rule'
-                } -useSystemMailbox $true
-
-                Write-LogMessage -API 'Standards' -tenant $tenant -message 'Created AutoForward outbound spam rule' -sev Info
-            } catch {
-                $ErrorMessage = Get-CippException -Exception $_
-                Write-LogMessage -API 'Standards' -tenant $tenant -message "Failed to create AutoForward rule. $($ErrorMessage.NormalizedError)" -sev Error
-            }
-        } else {
-            Write-LogMessage -API 'Standards' -tenant $tenant -message 'AutoForward policy or rule already exists, skipping creation' -sev Info
-        }
-
-        if (-not $AntiSpamPolicyExists -and -not $AntiSpamRuleExists) {
-            try {
-                New-ExoRequest -tenantid $tenant -cmdlet 'New-HostedOutboundSpamFilterPolicy' -cmdParams @{
-                    Name                         = 'PleinSudIT - AntiSpam Outbound Rule Standard'
-                    AutoForwardingEnabled        = 'Off'
-                    RecipientLimitPerHour        = 1000
-                    ExternalRecipientLimitPerHour = 500
-                    DailyRecipientLimit          = 1000
-                    ActionWhenThresholdReached   = 'BlockUser'
-                } -useSystemMailbox $true
-
-                New-ExoRequest -tenantid $tenant -cmdlet 'New-HostedOutboundSpamFilterRule' -cmdParams @{
-                    Name                         = 'PleinSudIT - AntiSpam Outbound Rule Standard'
-                    Priority                     = 1
-                    Enabled                      = $true
-                    RecipientDomainIs            = 'defaultdomain.com'
-                    HostedOutboundSpamFilterPolicy = 'PleinSudIT - AntiSpam Outbound Rule Standard'
-                } -useSystemMailbox $true
-
-                Write-LogMessage -API 'Standards' -tenant $tenant -message 'Created AntiSpam standard outbound spam rule' -sev Info
-            } catch {
-                $ErrorMessage = Get-CippException -Exception $_
-                Write-LogMessage -API 'Standards' -tenant $tenant -message "Failed to create AntiSpam standard rule. $($ErrorMessage.NormalizedError)" -sev Error
-            }
-        } else {
-            Write-LogMessage -API 'Standards' -tenant $tenant -message 'AntiSpam policy or rule already exists, skipping creation' -sev Info
-        }
+        
     }
 
     if ($Settings.alert -eq $true) {
+
         if ($StateIsCorrect -eq $true) {
             Write-LogMessage -API 'Standards' -tenant $tenant -message 'Auto forwarding is disabled.' -sev Info
         } else {
@@ -128,4 +65,7 @@ function Invoke-CIPPStandardEXODisableAutoForwarding {
         Set-CIPPStandardsCompareField -FieldName 'standards.EXODisableAutoForwarding' -FieldValue $state -TenantFilter $Tenant
         Add-CIPPBPAField -FieldName 'AutoForwardingDisabled' -FieldValue $StateIsCorrect -StoreAs bool -Tenant $tenant
     }
+
 }
+
+
