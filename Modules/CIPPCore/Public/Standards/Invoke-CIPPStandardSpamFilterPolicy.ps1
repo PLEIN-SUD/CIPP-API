@@ -110,6 +110,7 @@ function Invoke-CIPPStandardSpamFilterPolicy {
     ($CurrentState.EnableLanguageBlockList -eq $Settings.EnableLanguageBlockList) -and
     ((-not $CurrentState.LanguageBlockList -and -not $Settings.LanguageBlockList.value) -or (!(Compare-Object -ReferenceObject $CurrentState.LanguageBlockList -DifferenceObject $Settings.LanguageBlockList.value))) -and
     ($CurrentState.EnableRegionBlockList -eq $Settings.EnableRegionBlockList) -and
+    ($CurrentState.AdminDisplayName -eq "Politique Antispam standard par Plein Sud IT. Ne pas modifier sans autorisation.") -and
     ((-not $CurrentState.RegionBlockList -and -not $Settings.RegionBlockList.value) -or (!(Compare-Object -ReferenceObject $CurrentState.RegionBlockList -DifferenceObject $Settings.RegionBlockList.value))) -and
     (!(Compare-Object -ReferenceObject $CurrentState.AllowedSenderDomains -DifferenceObject ($Settings.AllowedSenderDomains.value ?? $Settings.AllowedSenderDomains)))
 
@@ -161,6 +162,7 @@ function Invoke-CIPPStandardSpamFilterPolicy {
                 PhishZapEnabled                      = $true
                 SpamZapEnabled                       = $true
                 AllowedSenderDomains                 = $Settings.AllowedSenderDomains.value ?? @{'@odata.type' = '#Exchange.GenericHashTable' }
+                AdminDisplayName                     = "Politique Antispam standard par Plein Sud IT. Ne pas modifier sans autorisation.")
             }
 
             # Remove optional block lists if not configured
