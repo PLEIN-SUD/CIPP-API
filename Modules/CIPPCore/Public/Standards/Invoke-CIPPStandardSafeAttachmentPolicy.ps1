@@ -50,7 +50,7 @@ function Invoke-CIPPStandardSafeAttachmentPolicy {
         } else {
             $PolicyName = $ExistingPolicy.Name
         }
-        $RuleList = @( 'CIPP Default Safe Attachment Rule', 'Plein Sud IT - Default Safe Attachment Policy')
+        $RuleList = @( 'Plein Sud IT - Default Safe Attachment Rule', 'Plein Sud IT - Default Safe Attachment Policy')
         $ExistingRule = New-ExoRequest -tenantid $Tenant -cmdlet 'Get-SafeAttachmentRule' | Where-Object -Property Name -In $RuleList
         if ($null -eq $ExistingRule.Name) {
             $RuleName = $RuleList[0]
