@@ -52,7 +52,7 @@ function Invoke-CIPPStandardSpamFilterPolicy {
 
     param($Tenant, $Settings)
 
-    $PolicyName = 'Plein Sud IT - AntiSpam Outbound Rule Standard'
+    $PolicyName = 'Plein Sud IT - AntiSpam Inbound Rule Standard'
 
     $CurrentState = New-ExoRequest -TenantId $Tenant -cmdlet 'Get-HostedContentFilterPolicy' | Where-Object -Property Name -EQ $PolicyName | Select-Object -Property *
 
