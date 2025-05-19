@@ -52,7 +52,7 @@ function Invoke-CIPPStandardSpamFilterPolicy {
 
     param($Tenant, $Settings)
 
-    $PolicyName = 'Plein Sud IT - Default Spam Filter Policy'
+    $PolicyName = 'Plein Sud IT - AntiSpam Outbound Rule Standard'
 
     $CurrentState = New-ExoRequest -TenantId $Tenant -cmdlet 'Get-HostedContentFilterPolicy' | Where-Object -Property Name -EQ $PolicyName | Select-Object -Property *
 
@@ -162,7 +162,7 @@ function Invoke-CIPPStandardSpamFilterPolicy {
                 PhishZapEnabled                      = $true
                 SpamZapEnabled                       = $true
                 AllowedSenderDomains                 = $Settings.AllowedSenderDomains.value ?? @{'@odata.type' = '#Exchange.GenericHashTable' }
-                AdminDisplayName                     = "Politique Antispam standard par Plein Sud IT. Ne pas modifier sans autorisation."
+                AdminDisplayName                     = "Politique Antispam sortante par Plein Sud IT. Ne pas modifier sans autorisation."
             }
 
             # Remove optional block lists if not configured
