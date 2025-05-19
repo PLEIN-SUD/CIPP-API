@@ -13,12 +13,37 @@ Function Invoke-ListSpamfilter {
     $APIName = $Request.Params.CIPPEndpoint
     $Headers = $Request.Headers
     Write-LogMessage -headers $Headers -API $APIName -message 'Accessed this API' -Sev 'Debug'
-    $Tenantfilter = $request.Query.tenantfilter
+    $Tenantfilter = $Request.Query.tenantfilter
 
     try {
-        $Policies = New-ExoRequest -tenantid $Tenantfilter -cmdlet 'Get-HostedContentFilterPolicy' | Select-Object * -ExcludeProperty *odata*, *data.type*
-        $RuleState = New-ExoRequest -tenantid $Tenantfilter -cmdlet 'Get-HostedContentFilterRule' | Select-Object * -ExcludeProperty *odata*, *data.type*
-        $GraphRequest = $Policies | Select-Object *, @{l = 'ruleState'; e = { $name = $_.name; ($RuleState | Where-Object name -EQ $name).State } }, @{l = 'rulePrio'; e = { $name = $_.name; ($RuleState | Where-Object name -EQ $name).Priority } }
+        # ----- Entrant -----
+        $InboundPolicies = New-ExoRequest -tenantid $Tenantfilter -cmdlet 'Get-HostedContentFilterPolicy' | 
+            Select-Object * -ExcludeProperty *odata*, *data.type*
+
+        $InboundRules = New-ExoRequest -tenantid $Tenantfilter -cmdlet 'Get-HostedContentFilterRule' | 
+            Select-Object * -ExcludeProperty *odata*, *data.type*
+
+        $InboundCombined = $InboundPolicies | Select-Object *, 
+            @{Name = 'RuleState'; Expression = { $name = $_.Name; ($InboundRules | Where-Object Name -eq $name).State }},
+            @{Name = 'RulePriority'; Expression = { $name = $_.Name; ($InboundRules | Where-Object Name -eq $name).Priority }}
+
+        # ----- Sortant -----
+        $OutboundPolicies = New-ExoRequest -tenantid $Tenantfilter -cmdlet 'Get-HostedOutboundSpamFilterPolicy' | 
+            Select-Object * -ExcludeProperty *odata*, *data.type*
+
+        $OutboundRules = New-ExoRequest -tenantid $Tenantfilter -cmdlet 'Get-HostedOutboundSpamFilterRule' | 
+            Select-Object * -ExcludeProperty *odata*, *data.type*
+
+        $OutboundCombined = $OutboundPolicies | Select-Object *, 
+            @{Name = 'RuleState'; Expression = { $name = $_.Name; ($OutboundRules | Where-Object Name -eq $name).State }},
+            @{Name = 'RulePriority'; Expression = { $name = $_.Name; ($OutboundRules | Where-Object Name -eq $name).Priority }}
+
+        # Combinaison des deux résultats
+        $GraphRequest = [PSCustomObject]@{
+            InboundSpamPolicies  = $InboundCombined
+            OutboundSpamPolicies = $OutboundCombined
+        }
+
         $StatusCode = [HttpStatusCode]::OK
     } catch {
         $ErrorMessage = Get-NormalizedError -Message $_.Exception.Message
@@ -26,10 +51,9 @@ Function Invoke-ListSpamfilter {
         $GraphRequest = $ErrorMessage
     }
 
-    # Associate values to output bindings by calling 'Push-OutputBinding'.
+    # Output bindings
     Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
-            StatusCode = $StatusCode
-            Body       = @($GraphRequest)
-        })
-
+        StatusCode = $StatusCode
+        Body       = @($GraphRequest)
+    })
 }
