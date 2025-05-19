@@ -162,7 +162,7 @@ function Invoke-CIPPStandardSpamFilterPolicy {
                 PhishZapEnabled                      = $true
                 SpamZapEnabled                       = $true
                 AllowedSenderDomains                 = $Settings.AllowedSenderDomains.value ?? @{'@odata.type' = '#Exchange.GenericHashTable' }
-                AdminDisplayName                     = "Politique Antispam sortante par Plein Sud IT. Ne pas modifier sans autorisation."
+                AdminDisplayName                     = "Politique Antispam entrante par Plein Sud IT. Ne pas modifier sans autorisation."
             }
 
             # Remove optional block lists if not configured
