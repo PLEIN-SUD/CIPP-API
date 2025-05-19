@@ -1,5 +1,3 @@
-using namespace System.Net
-
 Function Invoke-ListSpamfilter {
     <#
     .FUNCTIONALITY
@@ -13,41 +11,12 @@ Function Invoke-ListSpamfilter {
     $APIName = $Request.Params.CIPPEndpoint
     $Headers = $Request.Headers
     Write-LogMessage -headers $Headers -API $APIName -message 'Accessed this API' -Sev 'Debug'
-    $Tenantfilter = $Request.Query.tenantfilter
+    $Tenantfilter = $request.Query.tenantfilter
 
     try {
-        # ----- Entrant -----
-        $InboundPolicies = New-ExoRequest -tenantid $Tenantfilter -cmdlet 'Get-HostedContentFilterPolicy' | 
-            Select-Object * -ExcludeProperty *odata*, *data.type*
-
-        $InboundRules = New-ExoRequest -tenantid $Tenantfilter -cmdlet 'Get-HostedContentFilterRule' | 
-            Select-Object * -ExcludeProperty *odata*, *data.type*
-
-        $InboundCombined = $InboundPolicies | ForEach-Object {
-            $rule = $InboundRules | Where-Object Name -eq $_.Name
-            $_ | Select-Object *, 
-                @{Name='RuleState'; Expression={$rule.State}},
-                @{Name='RulePriority'; Expression={$rule.Priority}},
-                @{Name='Direction'; Expression={'Inbound'}}
-        }
-
-        # ----- Sortant -----
-        $OutboundPolicies = New-ExoRequest -tenantid $Tenantfilter -cmdlet 'Get-HostedOutboundSpamFilterPolicy' | 
-            Select-Object * -ExcludeProperty *odata*, *data.type*
-
-        $OutboundRules = New-ExoRequest -tenantid $Tenantfilter -cmdlet 'Get-HostedOutboundSpamFilterRule' | 
-            Select-Object * -ExcludeProperty *odata*, *data.type*
-
-        $OutboundCombined = $OutboundPolicies | ForEach-Object {
-            $rule = $OutboundRules | Where-Object Name -eq $_.Name
-            $_ | Select-Object *, 
-                @{Name='RuleState'; Expression={$rule.State}},
-                @{Name='RulePriority'; Expression={$rule.Priority}},
-                @{Name='Direction'; Expression={'Outbound'}}
-        }
-
-        # Fusion des deux
-        $GraphRequest = $InboundCombined + $OutboundCombined
+        $Policies = New-ExoRequest -tenantid $Tenantfilter -cmdlet 'Get-HostedContentFilterPolicy' | Select-Object * -ExcludeProperty *odata*, *data.type*
+        $RuleState = New-ExoRequest -tenantid $Tenantfilter -cmdlet 'Get-HostedContentFilterRule' | Select-Object * -ExcludeProperty *odata*, *data.type*
+        $GraphRequest = $Policies | Select-Object *, @{l = 'ruleState'; e = { $name = $_.name; ($RuleState | Where-Object name -EQ $name).State } }, @{l = 'rulePrio'; e = { $name = $_.name; ($RuleState | Where-Object name -EQ $name).Priority } }
         $StatusCode = [HttpStatusCode]::OK
     } catch {
         $ErrorMessage = Get-NormalizedError -Message $_.Exception.Message
@@ -55,8 +24,10 @@ Function Invoke-ListSpamfilter {
         $GraphRequest = $ErrorMessage
     }
 
+    # Associate values to output bindings by calling 'Push-OutputBinding'.
     Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
-        StatusCode = $StatusCode
-        Body       = @($GraphRequest)
-    })
+            StatusCode = $StatusCode
+            Body       = @($GraphRequest)
+        })
+
 }
