@@ -23,9 +23,13 @@ Function Invoke-ListSpamfilter {
         $InboundRules = New-ExoRequest -tenantid $Tenantfilter -cmdlet 'Get-HostedContentFilterRule' | 
             Select-Object * -ExcludeProperty *odata*, *data.type*
 
-        $InboundCombined = $InboundPolicies | Select-Object *, 
-            @{Name = 'RuleState'; Expression = { $name = $_.Name; ($InboundRules | Where-Object Name -eq $name).State }},
-            @{Name = 'RulePriority'; Expression = { $name = $_.Name; ($InboundRules | Where-Object Name -eq $name).Priority }}
+        $InboundCombined = $InboundPolicies | ForEach-Object {
+            $rule = $InboundRules | Where-Object Name -eq $_.Name
+            $_ | Select-Object *, 
+                @{Name='RuleState'; Expression={$rule.State}},
+                @{Name='RulePriority'; Expression={$rule.Priority}},
+                @{Name='Direction'; Expression={'Inbound'}}
+        }
 
         # ----- Sortant -----
         $OutboundPolicies = New-ExoRequest -tenantid $Tenantfilter -cmdlet 'Get-HostedOutboundSpamFilterPolicy' | 
@@ -34,16 +38,16 @@ Function Invoke-ListSpamfilter {
         $OutboundRules = New-ExoRequest -tenantid $Tenantfilter -cmdlet 'Get-HostedOutboundSpamFilterRule' | 
             Select-Object * -ExcludeProperty *odata*, *data.type*
 
-        $OutboundCombined = $OutboundPolicies | Select-Object *, 
-            @{Name = 'RuleState'; Expression = { $name = $_.Name; ($OutboundRules | Where-Object Name -eq $name).State }},
-            @{Name = 'RulePriority'; Expression = { $name = $_.Name; ($OutboundRules | Where-Object Name -eq $name).Priority }}
-
-        # Combinaison des deux résultats
-        $GraphRequest = [PSCustomObject]@{
-            InboundSpamPolicies  = $InboundCombined
-            OutboundSpamPolicies = $OutboundCombined
+        $OutboundCombined = $OutboundPolicies | ForEach-Object {
+            $rule = $OutboundRules | Where-Object Name -eq $_.Name
+            $_ | Select-Object *, 
+                @{Name='RuleState'; Expression={$rule.State}},
+                @{Name='RulePriority'; Expression={$rule.Priority}},
+                @{Name='Direction'; Expression={'Outbound'}}
         }
 
+        # Fusion des deux
+        $GraphRequest = $InboundCombined + $OutboundCombined
         $StatusCode = [HttpStatusCode]::OK
     } catch {
         $ErrorMessage = Get-NormalizedError -Message $_.Exception.Message
@@ -51,7 +55,6 @@ Function Invoke-ListSpamfilter {
         $GraphRequest = $ErrorMessage
     }
 
-    # Output bindings
     Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
         StatusCode = $StatusCode
         Body       = @($GraphRequest)
