@@ -96,15 +96,9 @@ function Invoke-CIPPStandardAntiPhishPolicy {
                           ($CurrentState.TargetedUserQuarantineTag -eq $Settings.TargetedUserQuarantineTag) -and
                           ($CurrentState.TargetedDomainProtectionAction -eq $Settings.TargetedDomainProtectionAction) -and
                           ($CurrentState.TargetedDomainQuarantineTag -eq $Settings.TargetedDomainQuarantineTag) -and
-<<<<<<< HEAD
                           ($CurrentState.EnableOrganizationDomainsProtection -eq $true) -and
                           ($CurrentState.AdminDisplayName -eq "Politique antiphishing standard par Plein Sud IT. Ne pas modifier sans autorisation.")
-                          
-=======
-                          ($CurrentState.EnableTargetedDomainsProtection -eq $true) -and
-                          ($CurrentState.EnableTargetedUserProtection -eq $true) -and
-                          ($CurrentState.EnableOrganizationDomainsProtection -eq $true)
->>>>>>> upstream/master
+
     } else {
         $StateIsCorrect = ($CurrentState.Name -eq $PolicyName) -and
                           ($CurrentState.Enabled -eq $true) -and
