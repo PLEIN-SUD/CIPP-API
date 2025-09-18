@@ -58,7 +58,7 @@ function Invoke-CIPPStandardSpamFilterPolicy {
         return $true
     } #we're done.
 
-    $PolicyName = 'Plein Sud IT - AntiSpam Inbound Rule Standard'
+    $PolicyName = 'Plein Sud IT - Default Spam Filter Policy'
 
     try {
         $CurrentState = New-ExoRequest -TenantId $Tenant -cmdlet 'Get-HostedContentFilterPolicy' |
