@@ -70,14 +70,14 @@ function Invoke-CIPPStandardAntiPhishPolicy {
     $ExistingPolicy = New-ExoRequest -tenantid $Tenant -cmdlet 'Get-AntiPhishPolicy' | Where-Object -Property Name -In $PolicyList | Select-Object -First 1
     if ($null -eq $ExistingPolicy.Name) {
         # No existing policy - use the configured/default name
-        $PolicyName = if ($Settings.name) { $Settings.name } else { 'CIPP Default Anti-Phishing Policy' }
+        $PolicyName = if ($Settings.name) { $Settings.name } else { 'Plein Sud IT - Default Anti-Phishing Policy' }
     } else {
         # Use existing policy name if found
         $PolicyName = $ExistingPolicy.Name
     }
     # Derive rule name from policy name, but check for old names for backward compatibility
     $DesiredRuleName = "$PolicyName Rule"
-    $RuleList = @($DesiredRuleName, 'Plein Sud IT - Default Anti-Phishing Rule','CIPP Default Anti-Phishing Policy')
+    $RuleList = @($DesiredRuleName, 'CIPP Default Anti-Phishing Rule','CIPP Default Anti-Phishing Policy')
     $ExistingRule = New-ExoRequest -tenantid $Tenant -cmdlet 'Get-AntiPhishRule' | Where-Object -Property Name -In $RuleList | Select-Object -First 1
     if ($null -eq $ExistingRule.Name) {
         # No existing rule - use the derived name

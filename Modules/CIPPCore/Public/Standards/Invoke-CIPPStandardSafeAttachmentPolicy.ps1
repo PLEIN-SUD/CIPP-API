@@ -56,7 +56,7 @@ function Invoke-CIPPStandardSafeAttachmentPolicy {
         $ExistingPolicy = New-ExoRequest -tenantid $Tenant -cmdlet 'Get-SafeAttachmentPolicy' | Where-Object -Property Name -In $PolicyList | Select-Object -First 1
         if ($null -eq $ExistingPolicy.Name) {
             # No existing policy - use the configured/default name
-            $PolicyName = if ($Settings.name) { $Settings.name } else { 'CIPP Default Safe Attachment Policy' }
+            $PolicyName = if ($Settings.name) { $Settings.name } else { 'Plein Sud IT - Default Safe Attachment Policy' }
         } else {
             # Use existing policy name if found
             $PolicyName = $ExistingPolicy.Name

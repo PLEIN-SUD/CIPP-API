@@ -62,7 +62,7 @@ function Invoke-CIPPStandardSafeLinksPolicy {
         }
         # Derive rule name from policy name, but check for old names for backward compatibility
         $DesiredRuleName = "$PolicyName Rule"
-        $RuleList = @($DesiredRuleName, 'Plein Sud IT - Default SafeLinks Rule', 'CIPP Default SafeLinks Policy')
+        $RuleList = @($DesiredRuleName, 'Plein Sud IT - Default SafeLinks Rule', 'Plein Sud IT - Default SafeLinks Policy')
         $ExistingRule = New-ExoRequest -tenantid $Tenant -cmdlet 'Get-SafeLinksRule' | Where-Object -Property Name -In $RuleList | Select-Object -First 1
         if ($null -eq $ExistingRule.Name) {
             # No existing rule - use the derived name
