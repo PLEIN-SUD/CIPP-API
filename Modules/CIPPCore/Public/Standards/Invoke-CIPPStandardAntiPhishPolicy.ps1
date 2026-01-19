@@ -112,9 +112,36 @@ function Invoke-CIPPStandardAntiPhishPolicy {
                           ($CurrentState.TargetedUserQuarantineTag -eq $Settings.TargetedUserQuarantineTag) -and
                           ($CurrentState.TargetedDomainProtectionAction -eq $Settings.TargetedDomainProtectionAction) -and
                           ($CurrentState.TargetedDomainQuarantineTag -eq $Settings.TargetedDomainQuarantineTag) -and
-                          ($CurrentState.EnableOrganizationDomainsProtection -eq $true) -and
-                          ($CurrentState.AdminDisplayName -eq "Politique antiphishing standard par Plein Sud IT. Ne pas modifier sans autorisation.")
+                          ($CurrentState.EnableTargetedDomainsProtection -eq $true) -and
+                          ($CurrentState.EnableTargetedUserProtection -eq $true) -and
+                          ($CurrentState.EnableOrganizationDomainsProtection -eq $true)
 
+        $CurrentValue = $CurrentState | Select-Object Name, Enabled, PhishThresholdLevel, EnableMailboxIntelligence, EnableMailboxIntelligenceProtection, EnableSpoofIntelligence, EnableFirstContactSafetyTips, EnableSimilarUsersSafetyTips, EnableSimilarDomainsSafetyTips, EnableUnusualCharactersSafetyTips, EnableUnauthenticatedSender, EnableViaTag, AuthenticationFailAction, SpoofQuarantineTag, MailboxIntelligenceProtectionAction, MailboxIntelligenceQuarantineTag, TargetedUserProtectionAction, TargetedUserQuarantineTag, TargetedDomainProtectionAction, TargetedDomainQuarantineTag, EnableOrganizationDomainsProtection, EnableTargetedDomainsProtection, EnableTargetedUserProtection
+        $ExpectedValue = [PSCustomObject]@{
+            Name                                 = $PolicyName
+            Enabled                              = $true
+            PhishThresholdLevel                  = $Settings.PhishThresholdLevel
+            EnableMailboxIntelligence            = $true
+            EnableMailboxIntelligenceProtection  = $true
+            EnableSpoofIntelligence              = $true
+            EnableFirstContactSafetyTips         = $Settings.EnableFirstContactSafetyTips
+            EnableSimilarUsersSafetyTips         = $Settings.EnableSimilarUsersSafetyTips
+            EnableSimilarDomainsSafetyTips       = $Settings.EnableSimilarDomainsSafetyTips
+            EnableUnusualCharactersSafetyTips    = $Settings.EnableUnusualCharactersSafetyTips
+            EnableUnauthenticatedSender          = $true
+            EnableViaTag                         = $true
+            AuthenticationFailAction             = $Settings.AuthenticationFailAction
+            SpoofQuarantineTag                   = $Settings.SpoofQuarantineTag
+            MailboxIntelligenceProtectionAction  = $Settings.MailboxIntelligenceProtectionAction
+            MailboxIntelligenceQuarantineTag     = $Settings.MailboxIntelligenceQuarantineTag
+            TargetedUserProtectionAction         = $Settings.TargetedUserProtectionAction
+            TargetedUserQuarantineTag            = $Settings.TargetedUserQuarantineTag
+            TargetedDomainProtectionAction       = $Settings.TargetedDomainProtectionAction
+            TargetedDomainQuarantineTag          = $Settings.TargetedDomainQuarantineTag
+            EnableTargetedDomainsProtection      = $true
+            EnableTargetedUserProtection         = $true
+            EnableOrganizationDomainsProtection  = $true
+        }
     } else {
         $StateIsCorrect = ($CurrentState.Name -eq $PolicyName) -and
                           ($CurrentState.Enabled -eq $true) -and
@@ -123,8 +150,18 @@ function Invoke-CIPPStandardAntiPhishPolicy {
                           ($CurrentState.EnableUnauthenticatedSender -eq $true) -and
                           ($CurrentState.EnableViaTag -eq $true) -and
                           ($CurrentState.AuthenticationFailAction -eq $Settings.AuthenticationFailAction) -and
-                          ($CurrentState.SpoofQuarantineTag -eq $Settings.SpoofQuarantineTag) -and
-                          ($CurrentState.AdminDisplayName -eq "Politique antiphishing standard par Plein Sud IT. Ne pas modifier sans autorisation.")
+                          ($CurrentState.SpoofQuarantineTag -eq $Settings.SpoofQuarantineTag)
+        $CurrentValue = $CurrentState | Select-Object Name, Enabled, EnableSpoofIntelligence, EnableFirstContactSafetyTips, EnableUnauthenticatedSender, EnableViaTag, AuthenticationFailAction, SpoofQuarantineTag
+        $ExpectedValue = [PSCustomObject]@{
+            Name                        = $PolicyName
+            Enabled                     = $true
+            EnableSpoofIntelligence     = $true
+            EnableFirstContactSafetyTips= $Settings.EnableFirstContactSafetyTips
+            EnableUnauthenticatedSender = $true
+            EnableViaTag                = $true
+            AuthenticationFailAction    = $Settings.AuthenticationFailAction
+            SpoofQuarantineTag          = $Settings.SpoofQuarantineTag
+        }
     }
 
     $AcceptedDomains = New-ExoRequest -tenantid $Tenant -cmdlet 'Get-AcceptedDomain'
