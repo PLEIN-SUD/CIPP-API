@@ -282,7 +282,7 @@ function Invoke-CIPPStandardSpamFilterPolicy {
             RegionBlockList                  = $CurrentState.RegionBlockList
             AllowedSenderDomains             = $CurrentState.AllowedSenderDomains
         }
-        $ExpectedValue = [pscustomobject]@{
+        $ExpectedValue = @{
             Name                             = $PolicyName
             SpamAction                       = $SpamAction
             SpamQuarantineTag                = $SpamQuarantineTag
