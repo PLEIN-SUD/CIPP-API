@@ -88,6 +88,32 @@ function Test-CIPPAccessPermissions {
                     }
                 ) | Out-Null
             }
+
+            # Entra records the flow a refresh token was originally obtained through, and
+            # Conditional Access re-evaluates it on every redemption - including the per-tenant
+            # redemptions CIPP makes for GDAP. So a token family that began as a device code
+            # login keeps tripping device code flow blocks (security defaults now enforces one)
+            # in every customer tenant that has one, surfacing as a Conditional Access error on
+            # ordinary Graph calls. The weekly token rotation cannot clear it: rotation reuses
+            # the original authentication context rather than re-authenticating. Only a fresh
+            # authorization code sign-in mints a clean family.
+            # No access token claim records this, so read it from the partner tenant's
+            # non-interactive sign-ins, which are the redemptions themselves.
+            try {
+                $SignInFilter = "appId eq '$($env:ApplicationID)' and signInEventTypes/any(t: t eq 'nonInteractiveUser')"
+                $SamSignIns = New-GraphGetRequest -uri "https://graph.microsoft.com/beta/auditLogs/signIns?api-version=beta&`$filter=$SignInFilter&`$top=10&`$select=createdDateTime,originalTransferMethod,authenticationProtocol" -tenantid $env:TenantID -NoAuthCheck $true -ErrorAction Stop
+                $DeviceCodeSignIn = $SamSignIns | Where-Object { $_.originalTransferMethod -eq 'deviceCodeFlow' -or $_.authenticationProtocol -eq 'deviceCode' } | Select-Object -First 1
+                if ($DeviceCodeSignIn) {
+                    $ErrorMessages.Add('Your refresh token originated from a device code login. Security defaults and Conditional Access authentication flow policies block that flow when the token is redeemed, which fails Graph calls in affected tenants with a Conditional Access error. Refresh your SAM tokens to sign in again - the weekly token update will not replace it.') | Out-Null
+                    $Success = $false
+                } else {
+                    $Messages.Add('Your refresh token did not originate from a device code login.') | Out-Null
+                }
+            } catch {
+                # Reading sign-in logs needs AuditLog.Read.All and an Entra ID P1 licence. Not
+                # having either is not an access check failure, it just leaves this unknown.
+                $Messages.Add('Could not determine whether your refresh token originated from a device code login. Reading sign-in logs requires AuditLog.Read.All and an Entra ID P1 license.') | Out-Null
+            }
         }
 
 
@@ -115,6 +141,20 @@ function Test-CIPPAccessPermissions {
                 }
             }
             $Success = $false
+
+            # Until now this only ever surfaced on the permissions page, so the only way to find
+            # out that CIPP needs new consent was to go and look. Log it so it reaches the
+            # notification pipeline like any other alert. Write-AlertMessage de-duplicates per
+            # day, so a check that runs on every page load doesn't repeat itself.
+            # Logged against the partner tenant - it's the CIPP application that needs consent,
+            # not a customer's tenant.
+            $MissingCount = ($MissingPermissions | Measure-Object).Count
+            $MissingSummary = ($MissingPermissions | ForEach-Object { $_.Permission } | Sort-Object -Unique) -join ', '
+            # Select-Object -First 1 because an empty TenantFilter makes Get-Tenants return every
+            # tenant, which would otherwise land every domain in the alert's Tenant field.
+            $PartnerTenant = Get-Tenants -TenantFilter $TenantFilter | Select-Object -First 1
+            $AlertTenant = if ($PartnerTenant.defaultDomainName) { $PartnerTenant.defaultDomainName } else { 'None' }
+            Write-AlertMessage -tenant $AlertTenant -tenantId $PartnerTenant.customerId -message "CIPP has $MissingCount new permission(s) to apply: $MissingSummary. Review and apply them under CIPP > Application Settings > Permissions."
         } else {
             $Messages.Add('You have all the required permissions.') | Out-Null
         }

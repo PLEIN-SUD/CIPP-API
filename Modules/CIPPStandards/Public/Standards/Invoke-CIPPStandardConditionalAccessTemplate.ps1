@@ -40,7 +40,7 @@ function Invoke-CIPPStandardConditionalAccessTemplate {
 
     #Checking if the DB has been updated in the last 3h, if not, run an update before we run the standard, as CA policies are critical and we want to make sure we have the latest state before making changes or comparisons.
     $LastDBUpdate = Get-CIPPDbItem -TenantFilter $Tenant -Type 'ConditionalAccessPolicies' -CountsOnly
-    if ($LastDBUpdate -eq $null -or ($LastDBUpdate.Timestamp -lt (Get-Date).AddHours(-3) -or $LastDBUpdate.DataCount -eq 0)) {
+    if ($null -eq $LastDBUpdate -or ($LastDBUpdate.Timestamp -lt (Get-Date).AddHours(-3) -or $LastDBUpdate.DataCount -eq 0)) {
         Write-Information "DB last updated at $($LastDBUpdate.Timestamp). Updating DB before running standard, this is probably a manual run."
         Set-CIPPDBCacheConditionalAccessPolicies -TenantFilter $Tenant
     } else {
@@ -56,6 +56,13 @@ function Invoke-CIPPStandardConditionalAccessTemplate {
 
     $Table = Get-CippTable -tablename 'templates'
 
+    # The template picker surfaces the row's GUID column, while everything here resolves by RowKey.
+    # CIPP writes both to the same value, so match either rather than reporting a template that is
+    # sitting in the table as missing.
+    $TemplateKey = ConvertTo-CIPPODataFilterValue -Value $Settings.TemplateList.value -Type String
+    $TemplateRow = Get-CippAzDataTableEntity @Table -Filter "PartitionKey eq 'CATemplate' and (RowKey eq '$TemplateKey' or GUID eq '$TemplateKey')" | Select-Object -First 1
+    $JSONObj = $TemplateRow.JSON
+
     try {
         #Get from DB, as we just downloaded the latest before the standard runs.
         $AllCAPolicies = New-CIPPDbRequest -TenantFilter $tenant -Type 'ConditionalAccessPolicies'
@@ -68,11 +75,9 @@ function Invoke-CIPPStandardConditionalAccessTemplate {
     }
 
     $DeployError = $null
-    if ($Settings.remediate -eq $true) {
+    if ($Settings.remediate -eq $true -and $JSONObj) {
         try {
-            $Filter = "PartitionKey eq 'CATemplate' and RowKey eq '$($Settings.TemplateList.value)'"
-            $JSONObj = (Get-CippAzDataTableEntity @Table -Filter $Filter).JSON
-            $Policy = $JSONObj | ConvertFrom-Json
+            $Policy = $JSONObj | ConvertFrom-Json -Depth 100
             if ($Policy.conditions.userRiskLevels.count -gt 0 -or $Policy.conditions.signInRiskLevels.count -gt 0) {
                 $TestP2 = Test-CIPPStandardLicense -StandardName 'ConditionalAccessTemplate_p2' -TenantFilter $Tenant -Preset EntraP2 -SkipLog
                 if (!$TestP2) {
@@ -101,25 +106,20 @@ function Invoke-CIPPStandardConditionalAccessTemplate {
             # Capture the Graph deploy error (e.g. invalid CA policy 1011/1085) so the report
             # section below surfaces the reason in the compare fields instead of just "missing".
             $DeployError = Get-NormalizedError -Message $_.Exception.Message
-            Write-LogMessage -API 'Standards' -tenant $tenant -message "Failed to create or update conditional access rule $($JSONObj.displayName). Error: $DeployError" -sev 'Error'
+            $PolicyName = $Policy.displayName ?? $Settings.TemplateList.label
+            Write-LogMessage -API 'Standards' -tenant $tenant -message "Failed to create or update conditional access rule $PolicyName. Error: $DeployError" -sev 'Error'
         }
     }
     if ($Settings.report -eq $true -or $Settings.remediate -eq $true) {
         $FieldName = "standards.ConditionalAccessTemplate.$($Settings.TemplateList.value)"
-        $Filter = "PartitionKey eq 'CATemplate' and RowKey eq '$($Settings.TemplateList.value)'"
-        $Policy = (Get-CippAzDataTableEntity @Table -Filter $Filter).JSON | ConvertFrom-Json -Depth 10
+        # Guarded: piping a null blob into ConvertFrom-Json writes a binding error to the stream
+        # before landing on the same null, which buries the actionable message logged below.
+        $Policy = if ($JSONObj) { $JSONObj | ConvertFrom-Json -Depth 100 } else { $null }
 
         if ($null -eq $Policy) {
             Write-LogMessage -API 'Standards' -tenant $Tenant -message "Conditional Access template '$($Settings.TemplateList.label)' ($($Settings.TemplateList.value)) could not be loaded from the template store - skipping." -Sev 'Error'
             Set-CIPPStandardsCompareField -FieldName $FieldName -CurrentValue @{ Differences = "Template '$($Settings.TemplateList.label)' could not be loaded from the template store." } -ExpectedValue @{ Differences = @() } -Tenant $Tenant
             return
-        }
-
-        # Override the template's state with the Drift Standard's state if specified
-        # This ensures drift detection compares against the desired state, not the original template state
-        if ($Settings.state -and $Settings.state -ne 'donotchange') {
-            Write-Information "Overriding template state from '$($Policy.state)' to '$($Settings.state)' for drift comparison"
-            $Policy | Add-Member -NotePropertyName 'state' -NotePropertyValue $Settings.state -Force
         }
 
         if ($Policy.sessionControls) {
@@ -176,6 +176,12 @@ function Invoke-CIPPStandardConditionalAccessTemplate {
                 Set-CIPPStandardsCompareField -FieldName $FieldName -CurrentValue @{ Differences = 'Tenant policy conversion returned null.' } -ExpectedValue @{ Differences = @() } -Tenant $Tenant
                 return
             }
+
+            if ($Settings.state -and $Settings.state -ne 'donotchange' -and $CompareObj.state -eq $Settings.state) {
+                Write-Information "Policy is in the deployed state '$($CompareObj.state)'; not comparing against template state '$($Policy.state)'"
+                $Policy | Add-Member -NotePropertyName 'state' -NotePropertyValue $CompareObj.state -Force
+            }
+
             try {
                 $Compare = Compare-CIPPIntuneObject -ReferenceObject $Policy -DifferenceObject $CompareObj -CompareType 'ca'
             } catch {

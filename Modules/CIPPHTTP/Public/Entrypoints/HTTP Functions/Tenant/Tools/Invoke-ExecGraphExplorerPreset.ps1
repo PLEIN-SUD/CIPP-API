@@ -4,6 +4,8 @@ function Invoke-ExecGraphExplorerPreset {
         Entrypoint
     .ROLE
         CIPP.Core.Read
+    .DESCRIPTION
+        Manages the caller's saved Graph Explorer presets. The action field selects the operation: Copy duplicates a preset, Save creates or updates one, and Delete removes one. Save and Delete modify stored data despite the Read role on this endpoint, and a caller may only modify presets they own.
     #>
     [CmdletBinding()]
     param($Request, $TriggerMetadata)
@@ -88,7 +90,7 @@ function Invoke-ExecGraphExplorerPreset {
             $Entity = Get-CIPPAzDataTableEntity @Table -Filter "RowKey eq '$Id'"
             if ($Entity.Owner -eq $Username ) {
                 if ($Action -eq 'Delete') {
-                    Remove-AzDataTableEntity -Force @Table -Entity $Entity
+                    Remove-CIPPAzDataTableEntity -Force @Table -Entity $Entity
                 } elseif ($Action -eq 'Save') {
                     Add-CIPPAzDataTableEntity @Table -Entity $Preset -Force
                 }

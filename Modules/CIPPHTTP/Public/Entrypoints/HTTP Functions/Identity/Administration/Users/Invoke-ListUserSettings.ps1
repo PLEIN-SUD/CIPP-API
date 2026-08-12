@@ -56,15 +56,11 @@ function Invoke-ListUserSettings {
 
         if (!$UserSettings) {
             $UserSettings = [pscustomobject]@{
-                direction      = 'ltr'
-                paletteMode    = 'light'
-                currentTheme   = @{ value = 'light'; label = 'light' }
-                pinNav         = $true
-                showDevtools   = $false
-                customBranding = @{
-                    colour = '#F77F00'
-                    logo   = $null
-                }
+                direction    = 'ltr'
+                paletteMode  = 'light'
+                currentTheme = @{ value = 'light'; label = 'light' }
+                pinNav       = $true
+                showDevtools = $false
             }
         }
 
@@ -101,14 +97,8 @@ function Invoke-ListUserSettings {
             Write-Warning "Failed to convert UserBookmarks JSON: $($_.Exception.Message)"
         }
 
-        #Get branding settings
-        if ($UserSettings) {
-            $brandingTable = Get-CippTable -tablename 'Config'
-            $BrandingSettings = Get-CIPPAzDataTableEntity @brandingTable -Filter "PartitionKey eq 'BrandingSettings' and RowKey eq 'BrandingSettings'"
-            if ($BrandingSettings) {
-                $UserSettings | Add-Member -MemberType NoteProperty -Name 'customBranding' -Value $BrandingSettings -Force | Out-Null
-            }
-        }
+        # Branding is served by Invoke-ListBrandingSettings, not from here: it carries inline
+        # images and its migration writes, neither of which belong on every page load.
 
         if ($UserSpecificSettings) {
             $UserSettings | Add-Member -MemberType NoteProperty -Name 'UserSpecificSettings' -Value $UserSpecificSettings -Force | Out-Null

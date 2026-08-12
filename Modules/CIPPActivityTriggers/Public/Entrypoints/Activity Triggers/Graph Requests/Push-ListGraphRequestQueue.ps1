@@ -25,7 +25,7 @@ function Push-ListGraphRequestQueue {
         Write-Information "Filter: $Filter"
         $Existing = Get-CIPPAzDataTableEntity @Table -Filter $Filter -Property PartitionKey, RowKey, OriginalEntityId
         if ($Existing) {
-            $null = Remove-AzDataTableEntity -Force @Table -Entity $Existing
+            $null = Remove-CIPPAzDataTableEntity -Force @Table -Entity $Existing
         }
         $GraphRequestParams = @{
             TenantFilter                = $Item.TenantFilter
@@ -50,7 +50,7 @@ function Push-ListGraphRequestQueue {
             $CippException = Get-CippException -Exception $_.Exception
             [PSCustomObject]@{
                 Tenant        = $Item.TenantFilter
-                CippStatus    = "Could not connect to tenant. $($CippException.NormalizedMessage)"
+                CippStatus    = "Could not connect to tenant. $($CippException.NormalizedError)"
                 CippException = [string]($CippException | ConvertTo-Json -Depth 10 -Compress)
             }
         }
