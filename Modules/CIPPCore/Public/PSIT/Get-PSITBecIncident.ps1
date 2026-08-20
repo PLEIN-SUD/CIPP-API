@@ -43,6 +43,11 @@ function Get-PSITBecIncident {
         MailReadStatus          = [string]$Row.MailReadStatus
         LikelyConsequences      = [string]$Row.LikelyConsequences
         ExecutiveNote           = [string]$Row.ExecutiveNote
+        DeliveredTo             = [string]$Row.DeliveredTo
+        DeliveredUtc            = [string]$Row.DeliveredUtc
+        DeliveryChannel         = [string]$Row.DeliveryChannel
+        AcknowledgedBy          = [string]$Row.AcknowledgedBy
+        AcknowledgedUtc         = [string]$Row.AcknowledgedUtc
         ExternalActions         = & $AsList $Row.ExternalActions
         ThirdPartiesNotified    = & $AsList $Row.ThirdPartiesNotified
         CreatedBy               = [string]$Row.CreatedBy
