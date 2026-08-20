@@ -32,7 +32,7 @@ Function Invoke-PSITExecBecIncident {
         Analyst      = $Analyst
     }
     foreach ($Field in @(
-            'userPrincipalName', 'reference', 'detectedUtc', 'containedUtc', 'status',
+            'userPrincipalName', 'reference', 'autotaskTicket', 'detectedUtc', 'containedUtc', 'status',
             'dataSubjectCategories', 'dataCategories', 'affectedPersonsEstimate',
             'affectedPersonsBasis', 'mailReadStatus', 'likelyConsequences', 'executiveNote',
             'externalActions', 'thirdPartiesNotified'

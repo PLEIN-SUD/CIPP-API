@@ -39,6 +39,11 @@ function Set-PSITBecIncident {
         [string]$Analyst,
 
         [string]$Reference,
+
+        # The MSP's own case reference. Carried on both reports, because "PSIT-BEC-20260820-AFF6"
+        # means nothing to a client who tracks the incident by its Autotask ticket.
+        [string]$AutotaskTicket,
+
         [string]$DetectedUtc,
         [string]$ContainedUtc,
 
@@ -103,6 +108,7 @@ function Set-PSITBecIncident {
         RowKey                  = $UserId
         UserPrincipalName       = & $Keep $UserPrincipalName ([string]$Existing.UserPrincipalName)
         Reference               = $IncidentReference
+        AutotaskTicket          = & $Keep $AutotaskTicket ([string]$Existing.AutotaskTicket)
         DetectedUtc             = & $Keep (& $ValidateStamp $DetectedUtc 'DetectedUtc') ([string]$Existing.DetectedUtc)
         ContainedUtc            = & $Keep (& $ValidateStamp $ContainedUtc 'ContainedUtc') ([string]$Existing.ContainedUtc)
         Status                  = & $Keep $Status ([string]$Existing.Status)

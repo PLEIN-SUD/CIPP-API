@@ -32,6 +32,7 @@ function Get-PSITBecIncident {
         UserId                  = $UserId
         UserPrincipalName       = [string]$Row.UserPrincipalName
         Reference               = [string]$Row.Reference
+        AutotaskTicket          = [string]$Row.AutotaskTicket
         DetectedUtc             = [string]$Row.DetectedUtc
         ContainedUtc            = [string]$Row.ContainedUtc
         Status                  = [string]$Row.Status

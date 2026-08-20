@@ -537,8 +537,8 @@
         # Automatic replies, out-of-office and NDRs are submitted by Exchange Online itself, so
         # their FromIP geolocates to wherever Microsoft registered the range. Counted as activity
         # outside the user's country, they turned 166 of 177 outbound messages into "foreign
-        # activity" on a real case (p.taieb, Aug 2026) while the one genuine signal - 22 successful
-        # sign-ins from a single Italian address - was buried under it. Same reason the campaign
+        # activity" on a real investigation while the one genuine signal - 22 successful sign-ins
+        # from a single foreign address - was buried under it. Same reason the campaign
         # and burst heuristics are re-run on human, external mail only: a recruiter's morning is
         # not a mass-mail campaign.
         $PsitOutbound = Get-PSITBecOutboundClassification -TraceRows $SentMessagesRaw -SenderAddress $UserName -GeoMap $GeoMap

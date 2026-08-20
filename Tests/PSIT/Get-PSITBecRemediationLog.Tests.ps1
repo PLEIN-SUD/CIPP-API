@@ -35,20 +35,20 @@ Describe 'Get-PSITBecRemediationLog' {
         Mock -CommandName Write-LogMessage -MockWith { }
         Mock -CommandName Get-CIPPAzDataTableEntity -MockWith {
             @(
-                New-LogRow 'ExecBECRemediate' 'Reset password for p.taieb@contoso.test' 's.miro@pleinsudit.com' 'Info' '2026-08-20T13:00:00Z'
-                New-LogRow 'ExecBECRemediate' 'Revoked sessions for p.taieb@contoso.test' 's.miro@pleinsudit.com' 'Info' '2026-08-20T13:01:00Z'
-                New-LogRow 'ExecBECRemediate' 'Successfully disabled rule: Facturation for p.taieb@contoso.test' 's.miro@pleinsudit.com' 'Info' '2026-08-20T13:02:00Z'
-                New-LogRow 'ExecBECRemediate' 'Could not disable rule for p.taieb@contoso.test: access denied' 's.miro@pleinsudit.com' 'Error' '2026-08-20T13:03:00Z'
+                New-LogRow 'ExecBECRemediate' 'Reset password for p.martin@contoso.test' 's.miro@pleinsudit.com' 'Info' '2026-08-20T13:00:00Z'
+                New-LogRow 'ExecBECRemediate' 'Revoked sessions for p.martin@contoso.test' 's.miro@pleinsudit.com' 'Info' '2026-08-20T13:01:00Z'
+                New-LogRow 'ExecBECRemediate' 'Successfully disabled rule: Facturation for p.martin@contoso.test' 's.miro@pleinsudit.com' 'Info' '2026-08-20T13:02:00Z'
+                New-LogRow 'ExecBECRemediate' 'Could not disable rule for p.martin@contoso.test: access denied' 's.miro@pleinsudit.com' 'Error' '2026-08-20T13:03:00Z'
                 # Same endpoint, different mailbox: must not be attributed to this incident.
                 New-LogRow 'ExecBECRemediate' 'Reset password for someone.else@contoso.test' 's.miro@pleinsudit.com' 'Info' '2026-08-20T13:04:00Z'
                 # An unrelated endpoint that mentions the mailbox: not remediation.
-                New-LogRow 'ListUsers' 'Listed users including p.taieb@contoso.test' 's.miro@pleinsudit.com' 'Info' '2026-08-20T13:05:00Z'
+                New-LogRow 'ListUsers' 'Listed users including p.martin@contoso.test' 's.miro@pleinsudit.com' 'Info' '2026-08-20T13:05:00Z'
             )
         }
     }
 
     It 'keeps only remediation entries that name the mailbox' {
-        $Result = Get-PSITBecRemediationLog -TenantFilter 'contoso.test' -UserPrincipalName 'p.taieb@contoso.test' -SinceUtc ([datetime]'2026-08-20T00:00:00Z')
+        $Result = Get-PSITBecRemediationLog -TenantFilter 'contoso.test' -UserPrincipalName 'p.martin@contoso.test' -SinceUtc ([datetime]'2026-08-20T00:00:00Z')
 
         @($Result.Entries).Count | Should -BeGreaterThan 0
         @($Result.Entries | Where-Object { $_.Message -like '*someone.else*' }).Count | Should -Be 0
@@ -56,7 +56,7 @@ Describe 'Get-PSITBecRemediationLog' {
     }
 
     It 'maps log messages to the canonical containment actions' {
-        $Result = Get-PSITBecRemediationLog -TenantFilter 'contoso.test' -UserPrincipalName 'p.taieb@contoso.test' -SinceUtc ([datetime]'2026-08-20T00:00:00Z')
+        $Result = Get-PSITBecRemediationLog -TenantFilter 'contoso.test' -UserPrincipalName 'p.martin@contoso.test' -SinceUtc ([datetime]'2026-08-20T00:00:00Z')
         $Actions = @($Result.ActionsPerformed | Select-Object -ExpandProperty Action)
 
         $Actions | Should -Contain 'PasswordReset'
@@ -65,27 +65,27 @@ Describe 'Get-PSITBecRemediationLog' {
     }
 
     It 'surfaces a failure rather than reporting the action as clean' {
-        $Result = Get-PSITBecRemediationLog -TenantFilter 'contoso.test' -UserPrincipalName 'p.taieb@contoso.test' -SinceUtc ([datetime]'2026-08-20T00:00:00Z')
+        $Result = Get-PSITBecRemediationLog -TenantFilter 'contoso.test' -UserPrincipalName 'p.martin@contoso.test' -SinceUtc ([datetime]'2026-08-20T00:00:00Z')
         $Rules = $Result.ActionsPerformed | Where-Object { $_.Action -eq 'InboxRulesDisabled' }
 
         $Rules.HasFailure | Should -BeTrue
     }
 
     It 'records the operator, which is what makes the section an attestation' {
-        $Result = Get-PSITBecRemediationLog -TenantFilter 'contoso.test' -UserPrincipalName 'p.taieb@contoso.test' -SinceUtc ([datetime]'2026-08-20T00:00:00Z')
+        $Result = Get-PSITBecRemediationLog -TenantFilter 'contoso.test' -UserPrincipalName 'p.martin@contoso.test' -SinceUtc ([datetime]'2026-08-20T00:00:00Z')
         ($Result.ActionsPerformed | Where-Object { $_.Action -eq 'PasswordReset' }).Operator | Should -Be 's.miro@pleinsudit.com'
     }
 
     It 'returns empty rather than throwing when the log holds nothing' {
         Mock -CommandName Get-CIPPAzDataTableEntity -MockWith { @() }
-        $Result = Get-PSITBecRemediationLog -TenantFilter 'contoso.test' -UserPrincipalName 'p.taieb@contoso.test' -SinceUtc ([datetime]'2026-08-20T00:00:00Z')
+        $Result = Get-PSITBecRemediationLog -TenantFilter 'contoso.test' -UserPrincipalName 'p.martin@contoso.test' -SinceUtc ([datetime]'2026-08-20T00:00:00Z')
 
         @($Result.Entries).Count | Should -Be 0
         @($Result.ActionsPerformed).Count | Should -Be 0
     }
 
     It 'never looks further back than the log retention makes meaningful' {
-        $Result = Get-PSITBecRemediationLog -TenantFilter 'contoso.test' -UserPrincipalName 'p.taieb@contoso.test' -SinceUtc ([datetime]::UtcNow.AddDays(-400))
+        $Result = Get-PSITBecRemediationLog -TenantFilter 'contoso.test' -UserPrincipalName 'p.martin@contoso.test' -SinceUtc ([datetime]::UtcNow.AddDays(-400))
         $WindowStart = [datetime]::Parse($Result.WindowStartUtc)
 
         $WindowStart | Should -BeGreaterThan ([datetime]::UtcNow.AddDays(-91))
@@ -108,7 +108,7 @@ Describe 'Set-PSITBecIncident' {
     }
 
     It 'generates a stable, readable reference on first save and keeps it afterwards' {
-        $First = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -UserPrincipalName 'p.taieb@contoso.test' -Analyst 's.miro' -Status 'ongoing'
+        $First = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -UserPrincipalName 'p.martin@contoso.test' -Analyst 's.miro' -Status 'ongoing'
         $First.Reference | Should -Match '^PSIT-BEC-\d{8}-[0-9A-F]{4}$'
 
         $Second = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro' -Status 'contained'
@@ -123,6 +123,15 @@ Describe 'Set-PSITBecIncident' {
         $Updated.LikelyConsequences | Should -Be 'Détournement de paiement'
         $Updated.DataCategories | Should -Contain 'Données bancaires ou financières'
         $Updated.UpdatedBy | Should -Be 'a.other'
+    }
+
+    It 'round-trips the Autotask ticket, which is the reference both reports quote' {
+        $Saved = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro' -AutotaskTicket 'T20260820.0042'
+        $Saved.AutotaskTicket | Should -Be 'T20260820.0042'
+
+        # A later save that only touches the status must not lose the business reference.
+        $Updated = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro' -Status 'contained'
+        $Updated.AutotaskTicket | Should -Be 'T20260820.0042'
     }
 
     It 'normalises timestamps to UTC' {
