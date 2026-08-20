@@ -10,8 +10,9 @@ BeforeAll {
     $BackendRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSCommandPath))
     $FunctionPath = Join-Path $BackendRoot 'Modules/CIPPCore/Public/Send-CIPPScheduledTaskAlert.ps1'
 
-    # Stubs for the dependencies we mock. ConvertTo-PSAHtml and Get-AlertContentHash are loaded
-    # for real so the test also proves the PSA HTML conversion doesn't strip the snooze markup.
+    # Stubs for the dependencies we mock. ConvertTo-PSAHtml, Get-AlertContentHash and
+    # Get-CIPPAlertSnoozeDuration are loaded for real so the test also proves the PSA HTML
+    # conversion doesn't strip the snooze markup.
     function Get-CippTable { param([string]$TableName) }
     function Get-CIPPAzDataTableEntity { param($TableName, $Filter, $Property, $First) }
     function Get-Tenants { param($TenantFilter, [switch]$IncludeErrors) }
@@ -25,6 +26,7 @@ BeforeAll {
 
     . (Join-Path $BackendRoot 'Modules/CIPPCore/Public/ConvertTo-PSAHtml.ps1')
     . (Join-Path $BackendRoot 'Modules/CIPPCore/Public/GraphHelper/Get-AlertContentHash.ps1')
+    . (Join-Path $BackendRoot 'Modules/CIPPCore/Public/GraphHelper/Get-CIPPAlertSnoozeDuration.ps1')
     . $FunctionPath
 
     function New-HaloExtConfig {
@@ -93,7 +95,7 @@ Describe 'Send-CIPPScheduledTaskAlert - PSA snooze links' {
 
             foreach ($Alert in $script:SentAlerts) {
                 $Alert.HTMLContent | Should -Match 'Snooze Individual Alerts'
-                foreach ($Duration in 7, 14, 30, 90) {
+                foreach ($Duration in (Get-CIPPAlertSnoozeDuration).Days) {
                     $Alert.HTMLContent | Should -Match "duration=$Duration"
                 }
                 $Alert.HTMLContent | Should -Match 'https://cipp\.contoso\.com/cipp/snooze-alert'

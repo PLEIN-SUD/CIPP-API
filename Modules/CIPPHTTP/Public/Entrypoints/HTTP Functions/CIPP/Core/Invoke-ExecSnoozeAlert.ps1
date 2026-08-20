@@ -28,10 +28,11 @@ function Invoke-ExecSnoozeAlert {
                 })
         }
 
-        if ($Duration -notin @(7, 14, 30, 90)) {
+        $AllowedDurations = @((Get-CIPPAlertSnoozeDuration).Days)
+        if ($Duration -notin $AllowedDurations) {
             return ([HttpResponseContext]@{
                     StatusCode = [HttpStatusCode]::BadRequest
-                    Body       = @{ Results = 'Duration must be 7, 14, 30, or 90 days.' }
+                    Body       = @{ Results = "Duration must be one of: $($AllowedDurations -join ', ') days." }
                 })
         }
 

@@ -100,21 +100,36 @@ function Send-CIPPScheduledTaskAlert {
 <h4 style="margin-top:0;color:#ff9800;">Snooze Individual Alerts</h4>
 <p style="margin:0 0 12px;font-size:13px;">Click a button to snooze that specific alert item. You will need to be signed in to CIPP.</p>
 '@
+            $SnoozeDurations = @(Get-CIPPAlertSnoozeDuration)
             foreach ($ResultItem in $Items) {
                 $HashResult = Get-AlertContentHash -AlertItem $ResultItem
                 $ItemPreview = [System.Web.HttpUtility]::HtmlEncode($HashResult.ContentPreview)
                 $EncodedData = [System.Web.HttpUtility]::UrlEncode(($ResultItem | ConvertTo-Json -Compress -Depth 5))
                 $BaseLink = "${CIPPURL}/cipp/snooze-alert?cmdlet=${EncodedCmdlet}&tenant=${EncodedTenant}&data=${EncodedData}"
+
+                # One button per allowed duration, coloured by how long the alert stays hidden.
+                $ButtonCells = ''
+                for ($Index = 0; $Index -lt $SnoozeDurations.Count; $Index++) {
+                    $SnoozeDuration = $SnoozeDurations[$Index]
+                    $ButtonColor = if ($SnoozeDuration.Days -le 14) {
+                        '#0078d4'
+                    } elseif ($SnoozeDuration.Days -le 90) {
+                        '#ff9800'
+                    } else {
+                        '#d32f2f'
+                    }
+                    $CellPadding = if ($Index -eq $SnoozeDurations.Count - 1) { '0' } else { '0 6px 6px 0' }
+                    $ButtonCells += @"
+<td style="padding:$CellPadding;"><table cellpadding="0" cellspacing="0" border="0"><tr><td style="background-color:$ButtonColor;padding:6px 14px;"><a href="${BaseLink}&duration=$($SnoozeDuration.Days)" style="color:#ffffff;font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap;">$($SnoozeDuration.Label)</a></td></tr></table></td>
+"@
+                }
+
                 $SnoozeLinksHtml += @"
 <table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-bottom:12px;border-bottom:1px solid #e0e0e0;padding-bottom:12px;">
 <tr><td style="font-size:13px;padding:0 0 8px 0;font-weight:600;">$ItemPreview</td></tr>
 <tr><td style="padding:0;">
 <table cellpadding="0" cellspacing="0" border="0"><tr>
-<td style="padding:0 6px 0 0;"><table cellpadding="0" cellspacing="0" border="0"><tr><td style="background-color:#0078d4;padding:6px 14px;"><a href="${BaseLink}&duration=7" style="color:#ffffff;font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap;">7 Days</a></td></tr></table></td>
-<td style="padding:0 6px 0 0;"><table cellpadding="0" cellspacing="0" border="0"><tr><td style="background-color:#0078d4;padding:6px 14px;"><a href="${BaseLink}&duration=14" style="color:#ffffff;font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap;">14 Days</a></td></tr></table></td>
-<td style="padding:0 6px 0 0;"><table cellpadding="0" cellspacing="0" border="0"><tr><td style="background-color:#ff9800;padding:6px 14px;"><a href="${BaseLink}&duration=30" style="color:#ffffff;font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap;">30 Days</a></td></tr></table></td>
-<td style="padding:0;"><table cellpadding="0" cellspacing="0" border="0"><tr><td style="background-color:#d32f2f;padding:6px 14px;"><a href="${BaseLink}&duration=90" style="color:#ffffff;font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap;">90 Days</a></td></tr></table></td>
-</tr></table>
+$ButtonCells</tr></table>
 </td></tr>
 </table>
 "@
@@ -351,7 +366,7 @@ function Send-CIPPScheduledTaskAlert {
                             apiEndpoint = '/api/ExecSnoozeAlert'
                             cmdletName  = $TaskInfo.Command
                             tenant      = $TenantFilter
-                            durations   = @(7, 14, 30, -1)
+                            durations   = @((Get-CIPPAlertSnoozeDuration).Days)
                             items       = @($Results | ForEach-Object {
                                     $HashResult = Get-AlertContentHash -AlertItem $_
                                     [PSCustomObject]@{
