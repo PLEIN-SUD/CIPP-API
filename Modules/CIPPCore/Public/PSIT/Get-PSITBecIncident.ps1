@@ -20,6 +20,25 @@ function Get-PSITBecIncident {
     $Table = Get-CippTable -tablename 'PSITBecIncidents'
     $Row = Get-CIPPAzDataTableEntity @Table -Filter "PartitionKey eq '$TenantFilter' and RowKey eq '$UserId'"
 
+    # Closed cases on the same mailbox. Archived rows are keyed "<UserId>_<Reference>", so a key
+    # range picks them up without scanning the table; '~' sorts above every character a reference
+    # can contain. A second compromise of the same mailbox is a finding in itself, so this is
+    # returned to the panels and to both reports rather than kept for support.
+    $PreviousRows = Get-CIPPAzDataTableEntity @Table -Filter "PartitionKey eq '$TenantFilter' and RowKey ge '$($UserId)_' and RowKey le '$($UserId)_~'"
+    $PreviousList = foreach ($Previous in @($PreviousRows | Where-Object { $_.Reference })) {
+        [pscustomobject]@{
+            Reference      = [string]$Previous.Reference
+            AutotaskTicket = [string]$Previous.AutotaskTicket
+            DetectedUtc    = [string]$Previous.DetectedUtc
+            ContainedUtc   = [string]$Previous.ContainedUtc
+            Status         = [string]$Previous.Status
+            ClosedUtc      = [string]$Previous.ClosedUtc
+            ClosedBy       = [string]$Previous.ClosedBy
+            ClosureNote    = [string]$Previous.ClosureNote
+        }
+    }
+    $PreviousCases = @(@($PreviousList) | Sort-Object -Property ClosedUtc -Descending)
+
     $AsList = {
         param($Value)
         if ([string]::IsNullOrWhiteSpace($Value)) { return @() }
@@ -54,5 +73,7 @@ function Get-PSITBecIncident {
         CreatedUtc              = [string]$Row.CreatedUtc
         UpdatedBy               = [string]$Row.UpdatedBy
         UpdatedUtc              = [string]$Row.UpdatedUtc
+        PreviousCases           = $PreviousCases
+        RepeatOffence           = @($PreviousCases).Count -gt 0
     }
 }

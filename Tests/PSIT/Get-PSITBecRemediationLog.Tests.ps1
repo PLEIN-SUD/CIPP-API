@@ -11,10 +11,12 @@ BeforeAll {
     . (Join-Path $RepoRoot 'Modules/CIPPCore/Public/PSIT/Get-PSITBecRemediationLog.ps1')
     . (Join-Path $RepoRoot 'Modules/CIPPCore/Public/PSIT/Get-PSITBecIncident.ps1')
     . (Join-Path $RepoRoot 'Modules/CIPPCore/Public/PSIT/Set-PSITBecIncident.ps1')
+    . (Join-Path $RepoRoot 'Modules/CIPPCore/Public/PSIT/Close-PSITBecIncident.ps1')
 
     function Get-CippTable { param($tablename) @{ Table = $tablename } }
     function Get-CIPPAzDataTableEntity { param($Table, $Filter, $Property) }
     function Add-CIPPAzDataTableEntity { param($Table, $Entity, [switch]$Force) }
+    function Remove-AzDataTableEntity { param($Context, $Entity, [switch]$Force) }
     function Write-LogMessage { param($API, $tenant, $message, $sev, $headers, $LogData) }
 
     function New-LogRow {
@@ -181,5 +183,90 @@ Describe 'Set-PSITBecIncident' {
         $Empty = Get-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'never-seen'
         $Empty.Exists | Should -BeFalse
         @($Empty.DataCategories).Count | Should -Be 0
+    }
+}
+
+Describe 'Close-PSITBecIncident' {
+    BeforeEach {
+        # One store per table, keyed by RowKey, so archiving and removal are observable.
+        $script:Store = @{ PSITBecIncidents = @{}; PSITBecTriage = @{} }
+        Mock -CommandName Write-LogMessage -MockWith { }
+        Mock -CommandName Get-CippTable -MockWith { param($tablename) @{ Context = $tablename; Table = $tablename } }
+        Mock -CommandName Get-CIPPAzDataTableEntity -MockWith {
+            param($Context, $Table, $Filter, $Property)
+            $Name = if ($Context) { $Context } else { $Table }
+            $Rows = $script:Store[$Name]
+            if ($Filter -match "RowKey eq '([^']+)'") { return $Rows[$Matches[1]] }
+            if ($Filter -match "RowKey ge '([^']+)' and RowKey le '([^']+)'") {
+                $Low = $Matches[1]; $High = $Matches[2]
+                # Ordinal, like the table service: PowerShell's -ge/-le are culture-aware, and in
+                # that comparison '~' sorts before a letter, so the range would silently miss every
+                # archived row. Azure compares UTF-16 code units.
+                return @($Rows.Keys | Where-Object {
+                        [string]::CompareOrdinal($_, $Low) -ge 0 -and [string]::CompareOrdinal($_, $High) -le 0
+                    } | ForEach-Object { $Rows[$_] })
+            }
+            return $null
+        }
+        Mock -CommandName Add-CIPPAzDataTableEntity -MockWith {
+            param($Context, $Table, $Entity, [switch]$Force)
+            $Name = if ($Context) { $Context } else { $Table }
+            $script:Store[$Name][[string]$Entity.RowKey] = [pscustomobject]$Entity
+        }
+        Mock -CommandName Remove-AzDataTableEntity -MockWith {
+            param($Context, $Entity, [switch]$Force)
+            $script:Store[$Context].Remove([string]$Entity.RowKey)
+        }
+    }
+
+    It 'archives the case and frees the slot, so the next save opens a new one' {
+        $First = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro' -DetectedUtc '2026-08-20T09:00:00Z' -LikelyConsequences 'Détournement de paiement'
+        $Closure = Close-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro' -ClosureNote 'Confinée et validée par le client'
+
+        $Closure.Closed | Should -BeTrue
+        $Closure.Reference | Should -Be $First.Reference
+
+        # The live slot is empty: nothing of the first case can be inherited.
+        $Fresh = Get-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1'
+        $Fresh.Exists | Should -BeFalse
+        $Fresh.LikelyConsequences | Should -BeNullOrEmpty
+
+        $Second = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro' -DetectedUtc '2026-11-02T07:00:00Z'
+        $Second.Reference | Should -Not -Be $First.Reference
+        $Second.Reference | Should -Match '^PSIT-BEC-20261102-'
+        $Second.LikelyConsequences | Should -BeNullOrEmpty
+    }
+
+    It 'keeps the closed case readable, because a repeat compromise is a finding' {
+        $First = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro' -DetectedUtc '2026-08-20T09:00:00Z' -Status 'contained'
+        $null = Close-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro'
+        $null = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro' -DetectedUtc '2026-11-02T07:00:00Z'
+
+        $Current = Get-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1'
+        $Current.RepeatOffence | Should -BeTrue
+        @($Current.PreviousCases).Count | Should -Be 1
+        $Current.PreviousCases[0].Reference | Should -Be $First.Reference
+        $Current.PreviousCases[0].ClosedBy | Should -Be 's.miro'
+    }
+
+    It 'archives the determinations with their case, so they cannot silence a later signal' {
+        $null = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro'
+        $script:Store['PSITBecTriage']['u1'] = [pscustomobject]@{
+            PartitionKey   = 'contoso.test'
+            RowKey         = 'u1'
+            Determinations = '[{"SignalId":"signin-ip:203.0.113.42","Verdict":"expected"}]'
+        }
+
+        $Closure = Close-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro'
+
+        $Closure.ArchivedDeterminations | Should -Be 1
+        $script:Store['PSITBecTriage'].ContainsKey('u1') | Should -BeFalse
+        $script:Store['PSITBecTriage'].ContainsKey("u1_$($Closure.Reference)") | Should -BeTrue
+    }
+
+    It 'refuses to close a mailbox that has no open case' {
+        $Closure = Close-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'never-seen' -Analyst 's.miro'
+        $Closure.Closed | Should -BeFalse
+        $Closure.Reason | Should -Match 'nothing to close'
     }
 }

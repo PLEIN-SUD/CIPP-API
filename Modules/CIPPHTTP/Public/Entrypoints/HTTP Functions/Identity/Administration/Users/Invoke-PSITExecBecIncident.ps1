@@ -11,6 +11,10 @@ Function Invoke-PSITExecBecIncident {
         actions taken outside CIPP and third parties warned. These are the facts a GDPR article
         33(3) description requires and that no API can supply.
 
+        With action = 'close', archives the open case instead of updating it and frees the slot for
+        the next one, so a second compromise of the same mailbox cannot inherit the first one's
+        reference, dates or determinations.
+
         Writes nothing to the customer tenant.
     #>
     [CmdletBinding()]
@@ -25,6 +29,30 @@ Function Invoke-PSITExecBecIncident {
     }
 
     $Analyst = Get-PSITBecAnalyst -Headers $Request.Headers
+
+    if ([string]$Body.action -eq 'close') {
+        try {
+            $Closure = Close-PSITBecIncident -TenantFilter $Body.tenantFilter -UserId $Body.userId -Analyst $Analyst -ClosureNote $Body.closureNote
+            return ([HttpResponseContext]@{
+                    StatusCode = [HttpStatusCode]::OK
+                    Body       = @{
+                        Results = if ($Closure.Closed) {
+                            "Incident $($Closure.Reference) closed and archived by $Analyst. The next save will open a new case."
+                        } else {
+                            $Closure.Reason
+                        }
+                        Closure = $Closure
+                    }
+                })
+        } catch {
+            $ErrorMessage = Get-CippException -Exception $_
+            Write-LogMessage -headers $Request.Headers -API 'PSITExecBecIncident' -tenant $Body.tenantFilter -message "Failed to close the incident record for $($Body.userPrincipalName ?? $Body.userId): $($ErrorMessage.NormalizedError)" -sev Error -LogData $ErrorMessage
+            return ([HttpResponseContext]@{
+                    StatusCode = [HttpStatusCode]::BadRequest
+                    Body       = @{ Results = "Could not close the incident record: $($ErrorMessage.NormalizedError)" }
+                })
+        }
+    }
 
     $Parameters = @{
         TenantFilter = $Body.tenantFilter
