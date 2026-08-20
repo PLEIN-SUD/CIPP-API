@@ -35,7 +35,8 @@ Function Invoke-PSITExecBecIncident {
             'userPrincipalName', 'reference', 'autotaskTicket', 'detectedUtc', 'containedUtc', 'status',
             'dataSubjectCategories', 'dataCategories', 'affectedPersonsEstimate',
             'affectedPersonsBasis', 'mailReadStatus', 'likelyConsequences', 'executiveNote',
-            'externalActions', 'thirdPartiesNotified'
+            'externalActions', 'thirdPartiesNotified',
+            'deliveredTo', 'deliveredUtc', 'deliveryChannel', 'acknowledgedBy', 'acknowledgedUtc'
         )) {
         if ($null -ne $Body.$Field) {
             # Set-PSITBecIncident uses PascalCase parameter names.
