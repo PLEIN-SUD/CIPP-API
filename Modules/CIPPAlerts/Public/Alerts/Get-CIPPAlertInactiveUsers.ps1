@@ -39,7 +39,18 @@ function Get-CIPPAlertInactiveUsers {
 
             $GraphRequest = New-GraphGetRequest -uri $Uri -tenantid $TenantFilter | Where-Object { $_.userType -eq 'Member' }
 
+            # PSIT-CUSTOM-BEGIN: shared and resource mailboxes are expected to sit unused
+            $ExcludedMailboxes = if ([bool]$InputValue.ExcludeSharedMailboxes) {
+                Get-PSITNonUserMailboxIndex -TenantFilter $TenantFilter
+            } else {
+                $null
+            }
+            # PSIT-CUSTOM-END
+
             $AlertData = foreach ($user in $GraphRequest) {
+                # PSIT-CUSTOM-BEGIN: shared and resource mailboxes are expected to sit unused
+                if ($null -ne $ExcludedMailboxes -and (Test-PSITNonUserMailbox -Index $ExcludedMailboxes -User $user)) { continue }
+                # PSIT-CUSTOM-END
                 $lastInteractive = $user.signInActivity.lastSignInDateTime
                 $lastNonInteractive = $user.signInActivity.lastNonInteractiveSignInDateTime
 

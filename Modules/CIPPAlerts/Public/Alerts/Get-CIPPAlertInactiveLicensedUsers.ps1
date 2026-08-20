@@ -47,6 +47,14 @@ function Get-CIPPAlertInactiveLicensedUsers {
             $GraphRequest = New-GraphGetRequest -uri $Uri -scope 'https://graph.microsoft.com/.default' -tenantid $TenantFilter |
                 Where-Object { $null -ne $_.assignedLicenses -and $_.assignedLicenses.Count -gt 0 }
 
+            # PSIT-CUSTOM-BEGIN: shared and resource mailboxes are expected to sit unused
+            $ExcludedMailboxes = if ([bool]$InputValue.ExcludeSharedMailboxes) {
+                Get-PSITNonUserMailboxIndex -TenantFilter $TenantFilter
+            } else {
+                $null
+            }
+            # PSIT-CUSTOM-END
+
             $LicenseOverview = @()
             try {
                 $LicenseOverview = @(New-CIPPDbRequest -TenantFilter $TenantFilter -Type 'LicenseOverview')
@@ -55,6 +63,9 @@ function Get-CIPPAlertInactiveLicensedUsers {
             }
 
             $AlertData = foreach ($user in $GraphRequest) {
+                # PSIT-CUSTOM-BEGIN: shared and resource mailboxes are expected to sit unused
+                if ($null -ne $ExcludedMailboxes -and (Test-PSITNonUserMailbox -Index $ExcludedMailboxes -User $user)) { continue }
+                # PSIT-CUSTOM-END
                 $lastInteractive = $user.signInActivity.lastSignInDateTime
                 $lastNonInteractive = $user.signInActivity.lastNonInteractiveSignInDateTime
 
