@@ -116,6 +116,15 @@ Describe 'Set-PSITBecIncident' {
         $Second.Status | Should -Be 'contained'
     }
 
+    It 'dates the reference on the detection when the first save carries one' {
+        $Incident = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u2' -Analyst 's.miro' -DetectedUtc '2026-07-03T08:00:00Z'
+        $Incident.Reference | Should -Match '^PSIT-BEC-20260703-[0-9A-F]{4}$'
+
+        # And never moves afterwards, even once the detection date is corrected.
+        $Updated = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u2' -Analyst 's.miro' -DetectedUtc '2026-08-01T08:00:00Z'
+        $Updated.Reference | Should -Be $Incident.Reference
+    }
+
     It 'does not wipe a field that a later save leaves out' {
         $null = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro' -LikelyConsequences 'Détournement de paiement' -DataCategories @('Données bancaires ou financières')
         $Updated = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 'a.other' -Status 'contained'

@@ -91,13 +91,21 @@ function Set-PSITBecIncident {
         return $Parsed.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
     }
 
+    # Validated once, because the reference is derived from it: a reference reading PSIT-BEC-20260820
+    # on an incident detected in July invites the wrong date to be quoted from it.
+    $DetectedStamp = & $ValidateStamp $DetectedUtc 'DetectedUtc'
+    $ContainedStamp = & $ValidateStamp $ContainedUtc 'ContainedUtc'
+
     $IncidentReference = if ($Reference) {
         $Reference
     } elseif ($Existing.Reference) {
         [string]$Existing.Reference
     } else {
-        # Stable, sortable, and meaningful to a human reading a ticket queue.
-        'PSIT-BEC-{0}-{1}' -f ([datetime]::UtcNow.ToString('yyyyMMdd')), ([guid]::NewGuid().ToString().Substring(0, 4).ToUpperInvariant())
+        # Stable, sortable, and meaningful to a human reading a ticket queue. Dated on the detection
+        # when the first save carries one, on the day the file was opened otherwise - and computed
+        # only once, so it never moves afterwards.
+        $ReferenceDate = if ($DetectedStamp) { ([datetime]$DetectedStamp).ToString('yyyyMMdd') } else { [datetime]::UtcNow.ToString('yyyyMMdd') }
+        'PSIT-BEC-{0}-{1}' -f $ReferenceDate, ([guid]::NewGuid().ToString().Substring(0, 4).ToUpperInvariant())
     }
 
     $Keep = {
@@ -118,8 +126,8 @@ function Set-PSITBecIncident {
         UserPrincipalName       = & $Keep $UserPrincipalName ([string]$Existing.UserPrincipalName)
         Reference               = $IncidentReference
         AutotaskTicket          = & $Keep $AutotaskTicket ([string]$Existing.AutotaskTicket)
-        DetectedUtc             = & $Keep (& $ValidateStamp $DetectedUtc 'DetectedUtc') ([string]$Existing.DetectedUtc)
-        ContainedUtc            = & $Keep (& $ValidateStamp $ContainedUtc 'ContainedUtc') ([string]$Existing.ContainedUtc)
+        DetectedUtc             = & $Keep $DetectedStamp ([string]$Existing.DetectedUtc)
+        ContainedUtc            = & $Keep $ContainedStamp ([string]$Existing.ContainedUtc)
         Status                  = & $Keep $Status ([string]$Existing.Status)
         DataSubjectCategories   = & $KeepList $DataSubjectCategories $Existing.DataSubjectCategories
         DataCategories          = & $KeepList $DataCategories $Existing.DataCategories
