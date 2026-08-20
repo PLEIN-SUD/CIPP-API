@@ -61,15 +61,6 @@ function Set-PSITBecIncident {
         [string]$LikelyConsequences,
         [string]$ExecutiveNote,
 
-        # Who the report was handed to, when and how, and who acknowledged it. An incident report
-        # is a piece of evidence in a dispute with an insurer or a client: "we told them" has to be
-        # recorded at the time, not reconstructed from memory a year later.
-        [string]$DeliveredTo,
-        [string]$DeliveredUtc,
-        [string]$DeliveryChannel,
-        [string]$AcknowledgedBy,
-        [string]$AcknowledgedUtc,
-
         # Actions taken outside CIPP: the bank called, a supplier warned, a complaint filed. Kept
         # separate from the CIPP log so the report can say which is attested and which is declared.
         $ExternalActions,
@@ -128,11 +119,6 @@ function Set-PSITBecIncident {
         MailReadStatus          = & $Keep $MailReadStatus ([string]$Existing.MailReadStatus)
         LikelyConsequences      = & $Keep $LikelyConsequences ([string]$Existing.LikelyConsequences)
         ExecutiveNote           = & $Keep $ExecutiveNote ([string]$Existing.ExecutiveNote)
-        DeliveredTo             = & $Keep $DeliveredTo ([string]$Existing.DeliveredTo)
-        DeliveredUtc            = & $Keep (& $ValidateStamp $DeliveredUtc 'DeliveredUtc') ([string]$Existing.DeliveredUtc)
-        DeliveryChannel         = & $Keep $DeliveryChannel ([string]$Existing.DeliveryChannel)
-        AcknowledgedBy          = & $Keep $AcknowledgedBy ([string]$Existing.AcknowledgedBy)
-        AcknowledgedUtc         = & $Keep (& $ValidateStamp $AcknowledgedUtc 'AcknowledgedUtc') ([string]$Existing.AcknowledgedUtc)
         ExternalActions         = & $KeepList $ExternalActions $Existing.ExternalActions
         ThirdPartiesNotified    = & $KeepList $ThirdPartiesNotified $Existing.ThirdPartiesNotified
         UpdatedBy               = $Analyst

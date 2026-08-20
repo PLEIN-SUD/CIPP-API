@@ -134,23 +134,6 @@ Describe 'Set-PSITBecIncident' {
         $Updated.AutotaskTicket | Should -Be 'T20260820.0042'
     }
 
-    It 'records the handover of the report, which is evidence in its own right' {
-        $Saved = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro' `
-            -DeliveredTo 'Direction financière' -DeliveredUtc '2026-08-21T09:00:00Z' `
-            -DeliveryChannel 'courriel' -AcknowledgedBy 'DAF' -AcknowledgedUtc '2026-08-21T10:30:00Z'
-
-        $Saved.DeliveredTo | Should -Be 'Direction financière'
-        $Saved.DeliveredUtc | Should -Be '2026-08-21T09:00:00Z'
-        $Saved.DeliveryChannel | Should -Be 'courriel'
-        $Saved.AcknowledgedBy | Should -Be 'DAF'
-        $Saved.AcknowledgedUtc | Should -Be '2026-08-21T10:30:00Z'
-    }
-
-    It 'refuses an unparseable acknowledgement date rather than storing rubbish' {
-        { Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro' -AcknowledgedUtc 'la semaine derniere' } |
-            Should -Throw '*not a valid date*'
-    }
-
     It 'normalises timestamps to UTC' {
         $Incident = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro' -DetectedUtc '2026-08-20T11:00:00+02:00'
         $Incident.DetectedUtc | Should -Be '2026-08-20T09:00:00Z'
