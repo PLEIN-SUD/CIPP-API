@@ -30,7 +30,9 @@ function Get-PSITBecRemediationLog {
         [Parameter(Mandatory = $true)]
         [string]$UserPrincipalName,
 
-        [datetime]$SinceUtc = ([datetime]::UtcNow.AddDays(-30)),
+        # Seven days by default, not thirty: every extra day is another CippLogs partition query,
+        # and the containment of an incident is decided in hours, not weeks.
+        [datetime]$SinceUtc = ([datetime]::UtcNow.AddDays(-7)),
 
         [string]$UserId
     )
@@ -68,12 +70,18 @@ function Get-PSITBecRemediationLog {
     $Entries = [System.Collections.Generic.List[object]]::new()
     $Needles = @($UserPrincipalName, $UserId) | Where-Object { $_ }
 
+    # The API allowlist goes into the query, not into a client-side Where-Object. CippLogs holds
+    # every action CIPP takes for the tenant; pulling a whole day of it back to filter three rows
+    # out of it burned memory-time on a page that only wanted a containment trail. The table
+    # service has to scan either way, but it returns kilobytes instead of megabytes.
+    $ApiFilter = '(' + (($RemediationApis | ForEach-Object { "API eq '$_'" }) -join ' or ') + ')'
+
     $Day = $SinceUtc.Date
     $Today = [datetime]::UtcNow.Date
     while ($Day -le $Today) {
         $PartitionKey = $Day.ToString('yyyyMMdd')
         try {
-            $Rows = Get-CIPPAzDataTableEntity @Table -Filter "PartitionKey eq '$PartitionKey' and Tenant eq '$TenantFilter'"
+            $Rows = Get-CIPPAzDataTableEntity @Table -Filter "PartitionKey eq '$PartitionKey' and Tenant eq '$TenantFilter' and $ApiFilter"
         } catch {
             Write-Information "Could not read CippLogs partition $PartitionKey : $($_.Exception.Message)"
             $Rows = @()

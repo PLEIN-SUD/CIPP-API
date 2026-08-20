@@ -27,17 +27,27 @@ Function Invoke-PSITListBecIncident {
     try {
         $Incident = Get-PSITBecIncident -TenantFilter $TenantFilter -UserId $UserId
 
-        # The remediation trail is only meaningful with a mailbox name to match on; without one the
-        # section is reported as unavailable rather than silently empty.
-        $Remediation = if ($UserPrincipalName -or $Incident.UserPrincipalName) {
-            $Since = if ($Incident.DetectedUtc) { ([datetime]$Incident.DetectedUtc).AddDays(-7) } else { [datetime]::UtcNow.AddDays(-30) }
-            Get-PSITBecRemediationLog -TenantFilter $TenantFilter -UserPrincipalName ($UserPrincipalName ?? $Incident.UserPrincipalName) -UserId $UserId -SinceUtc $Since
-        } else {
+        # The remediation trail is read only once a case file exists. This endpoint is called on
+        # every BEC page load, and the trail is a scan of CippLogs partitions: running it for a
+        # mailbox nobody has opened a case on cost consumption for a section that reads
+        # "non attestée" either way. Opening the case file (saving the Autotask ticket) is the
+        # signal that the trail is wanted.
+        $Mailbox = if ($UserPrincipalName) { $UserPrincipalName } else { [string]$Incident.UserPrincipalName }
+        $Remediation = if (-not $Incident.Exists) {
+            [pscustomobject]@{
+                Entries          = @()
+                ActionsPerformed = @()
+                Unavailable      = "No case file has been opened for this mailbox, so CIPP's remediation log was not read. Save the case file to have the containment trail attached."
+            }
+        } elseif ([string]::IsNullOrWhiteSpace($Mailbox)) {
             [pscustomobject]@{
                 Entries          = @()
                 ActionsPerformed = @()
                 Unavailable      = "No mailbox address was supplied, so CIPP's remediation log could not be matched to this account."
             }
+        } else {
+            $Since = if ($Incident.DetectedUtc) { ([datetime]$Incident.DetectedUtc).AddDays(-2) } else { [datetime]::UtcNow.AddDays(-7) }
+            Get-PSITBecRemediationLog -TenantFilter $TenantFilter -UserPrincipalName $Mailbox -UserId $UserId -SinceUtc $Since
         }
 
         return ([HttpResponseContext]@{
