@@ -532,6 +532,38 @@
             $Row | Add-Member -NotePropertyName 'ForeignLocation' -NotePropertyValue (& $TestForeign $Row.Country) -Force
         }
 
+        # PSIT-CUSTOM-BEGIN: keep service traffic and tenant churn out of the signals
+        #
+        # Automatic replies, out-of-office and NDRs are submitted by Exchange Online itself, so
+        # their FromIP geolocates to wherever Microsoft registered the range. Counted as activity
+        # outside the user's country, they turned 166 of 177 outbound messages into "foreign
+        # activity" on a real case (p.taieb, Aug 2026) while the one genuine signal - 22 successful
+        # sign-ins from a single Italian address - was buried under it. Same reason the campaign
+        # and burst heuristics are re-run on human, external mail only: a recruiter's morning is
+        # not a mass-mail campaign.
+        $PsitOutbound = Get-PSITBecOutboundClassification -TraceRows $SentMessagesRaw -SenderAddress $UserName -GeoMap $GeoMap
+        $PsitClassByRow = @{}
+        foreach ($PsitRow in @($PsitOutbound.Rows)) {
+            $PsitKey = '{0}|{1}' -f [string]$PsitRow.MessageTraceId, [string]$PsitRow.RecipientAddress
+            $PsitClassByRow[$PsitKey] = $PsitRow
+        }
+        foreach ($Row in @($SentMessages)) {
+            $PsitKey = '{0}|{1}' -f [string]$Row.MessageTraceId, [string]$Row.RecipientAddress
+            $PsitClass = $PsitClassByRow[$PsitKey]
+            $Row | Add-Member -NotePropertyName 'ServiceIp' -NotePropertyValue ([bool]$PsitClass.ServiceIp) -Force
+            $Row | Add-Member -NotePropertyName 'SystemGenerated' -NotePropertyValue ([bool]$PsitClass.SystemGenerated) -Force
+            $Row | Add-Member -NotePropertyName 'Internal' -NotePropertyValue ([bool]$PsitClass.Internal) -Force
+            # $null rather than $false: "cannot be judged" is a state this report already carries,
+            # and a Microsoft submission address says nothing about where the user was.
+            if ($PsitClass.ServiceIp) { $Row | Add-Member -NotePropertyName 'ForeignLocation' -NotePropertyValue $null -Force }
+        }
+        $SentMessageAnalysis = $PsitOutbound | Select-Object -Property * -ExcludeProperty Rows, AnalysableRows
+        # A password change on another account is tenant churn, not a signal on this mailbox.
+        $PasswordChanges = @($PasswordChanges | ForEach-Object {
+                $_ | Select-Object -Property *, @{ Name = 'IsSuspectUser'; Expression = { [string]$_.userPrincipalName -eq [string]$UserName } }
+            })
+        # PSIT-CUSTOM-END
+
         $SignInCountries = @($SuspectUserSignIns | Where-Object { $_.Country } | Group-Object -Property Country | Sort-Object -Property Count -Descending | ForEach-Object {
                 [PSCustomObject]@{ Country = $_.Name; Count = $_.Count }
             })
