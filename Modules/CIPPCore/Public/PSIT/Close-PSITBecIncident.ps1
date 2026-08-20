@@ -18,6 +18,12 @@ function Close-PSITBecIncident {
 
         A closed case stays readable - Get-PSITBecIncident lists them - because a repeat compromise
         of the same mailbox is itself a finding, for the analyst and for the client's DPO.
+
+        The collection itself is archived too, into its own table. Upstream keeps one cachebec row
+        per user, so the next run overwrites it: without this, closing a case left the reports as
+        the only surviving trace of the evidence they were built from. It goes in a separate table
+        rather than on the case row because the case row is read on every page load and the
+        collection payload is hundreds of kilobytes.
     #>
     [CmdletBinding()]
     param(
@@ -91,6 +97,39 @@ function Close-PSITBecIncident {
         }
     }
 
+    # The collection that the case was investigated from. Upstream overwrites it on the next run,
+    # so this is the only chance to keep it.
+    $CollectionArchived = $false
+    try {
+        $CacheTable = Get-CippTable -tablename 'cachebec'
+        $Cached = Get-CIPPAzDataTableEntity @CacheTable -Filter "PartitionKey eq 'bec' and RowKey eq '$UserId'"
+        if ($Cached.Results) {
+            $CollectionTable = Get-CippTable -tablename 'PSITBecCollections'
+            $CollectedUtc = ''
+            try {
+                $Parsed = [string]$Cached.Results | ConvertFrom-Json -ErrorAction Stop
+                if ($Parsed.ExtractedAt) { $CollectedUtc = ([datetime]$Parsed.ExtractedAt).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') }
+            } catch {
+                $CollectedUtc = ''
+            }
+            $null = Add-CIPPAzDataTableEntity @CollectionTable -Entity @{
+                PartitionKey = $TenantFilter
+                RowKey       = $ArchiveKey
+                UserId       = $UserId
+                Reference    = $Reference
+                CollectedUtc = $CollectedUtc
+                ArchivedUtc  = $Now
+                ArchivedBy   = $Analyst
+                Collection   = [string]$Cached.Results
+            } -Force
+            $CollectionArchived = $true
+        }
+    } catch {
+        # An archive that fails must not block the closure: the case file matters more than the
+        # evidence copy, and the failure is logged rather than swallowed.
+        Write-LogMessage -API 'PSITBecIncident' -tenant $TenantFilter -message "Incident $Reference closed, but the collection could not be archived: $($_.Exception.Message)" -sev Warn
+    }
+
     # Only now: the live rows go, after both archives are written. A crash between the two leaves a
     # duplicate to clean up, which is recoverable - the reverse order loses the case.
     Remove-AzDataTableEntity @IncidentTable -Entity ([pscustomobject]@{ PartitionKey = $TenantFilter; RowKey = $UserId }) -Force
@@ -98,7 +137,7 @@ function Close-PSITBecIncident {
         Remove-AzDataTableEntity @TriageTable -Entity ([pscustomobject]@{ PartitionKey = $TenantFilter; RowKey = $UserId }) -Force
     }
 
-    Write-LogMessage -API 'PSITBecIncident' -tenant $TenantFilter -message "Incident $Reference closed and archived by $Analyst ($ArchivedDeterminations determination(s) archived)" -sev Info
+    Write-LogMessage -API 'PSITBecIncident' -tenant $TenantFilter -message "Incident $Reference closed and archived by $Analyst ($ArchivedDeterminations determination(s), collection archived: $CollectionArchived)" -sev Info
 
     return [pscustomobject]@{
         Closed                 = $true
@@ -107,5 +146,6 @@ function Close-PSITBecIncident {
         ClosedUtc              = $Now
         ClosedBy               = $Analyst
         ArchivedDeterminations = $ArchivedDeterminations
+        CollectionArchived     = $CollectionArchived
     }
 }

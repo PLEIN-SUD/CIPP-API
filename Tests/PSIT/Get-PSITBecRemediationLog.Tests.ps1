@@ -189,13 +189,14 @@ Describe 'Set-PSITBecIncident' {
 Describe 'Close-PSITBecIncident' {
     BeforeEach {
         # One store per table, keyed by RowKey, so archiving and removal are observable.
-        $script:Store = @{ PSITBecIncidents = @{}; PSITBecTriage = @{} }
+        $script:Store = @{ PSITBecIncidents = @{}; PSITBecTriage = @{}; PSITBecCollections = @{}; cachebec = @{} }
         Mock -CommandName Write-LogMessage -MockWith { }
         Mock -CommandName Get-CippTable -MockWith { param($tablename) @{ Context = $tablename; Table = $tablename } }
         Mock -CommandName Get-CIPPAzDataTableEntity -MockWith {
             param($Context, $Table, $Filter, $Property)
             $Name = if ($Context) { $Context } else { $Table }
             $Rows = $script:Store[$Name]
+            if ($null -eq $Rows) { return $null }
             if ($Filter -match "RowKey eq '([^']+)'") { return $Rows[$Matches[1]] }
             if ($Filter -match "RowKey ge '([^']+)' and RowKey le '([^']+)'") {
                 $Low = $Matches[1]; $High = $Matches[2]
@@ -262,6 +263,30 @@ Describe 'Close-PSITBecIncident' {
         $Closure.ArchivedDeterminations | Should -Be 1
         $script:Store['PSITBecTriage'].ContainsKey('u1') | Should -BeFalse
         $script:Store['PSITBecTriage'].ContainsKey("u1_$($Closure.Reference)") | Should -BeTrue
+    }
+
+    It 'archives the collection, which upstream would otherwise overwrite on the next run' {
+        $null = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro'
+        $script:Store['cachebec']['u1'] = [pscustomobject]@{
+            PartitionKey = 'bec'
+            RowKey       = 'u1'
+            Results      = '{"ExtractedAt":"2026-08-20T10:32:00Z","SentMessages":[]}'
+        }
+
+        $Closure = Close-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro'
+
+        $Closure.CollectionArchived | Should -BeTrue
+        $Archived = $script:Store['PSITBecCollections']["u1_$($Closure.Reference)"]
+        $Archived.Collection | Should -Match 'SentMessages'
+        $Archived.CollectedUtc | Should -Be '2026-08-20T10:32:00Z'
+    }
+
+    It 'closes the case even when there is no collection left to archive' {
+        $null = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u3' -Analyst 's.miro'
+        $Closure = Close-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u3' -Analyst 's.miro'
+
+        $Closure.Closed | Should -BeTrue
+        $Closure.CollectionArchived | Should -BeFalse
     }
 
     It 'refuses to close a mailbox that has no open case' {
