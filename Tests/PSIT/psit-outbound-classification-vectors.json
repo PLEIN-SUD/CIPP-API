@@ -1,0 +1,135 @@
+{
+  "_contract": "psit-outbound-classification/v1",
+  "_duplicatedIn": [
+    "CIPP/tests/fixtures/psit-outbound-classification-vectors.json",
+    "CIPP-API/Tests/PSIT/psit-outbound-classification-vectors.json"
+  ],
+  "_why": "The same three rules are implemented twice: Get-PSITBecOutboundClassification.ps1 at collection time, and classifySentMessages in the front for collections that predate it. Two implementations of one rule drift. This file is the contract both must satisfy; a test in each repo runs every vector against its own implementation. The two copies must be changed together - nothing enforces that across repositories, so it is stated here and in both tests.",
+  "_notes": [
+    "The subject match is anchored: only a prefix counts, so a human forwarding an automatic reply stays human mail.",
+    "ServiceIp covers the published Exchange Online submission ranges. The PowerShell side can also recognise Microsoft by ASName from the geo lookup; the front has no ASName, so those cases are out of this contract.",
+    "senderAddress defines internal: same domain, case-insensitive."
+  ],
+  "senderAddress": "p.martin@contoso.test",
+  "cases": [
+    {
+      "name": "french automatic reply prefix",
+      "subject": "Réponse automatique : congés",
+      "recipientAddress": "contact@client.test",
+      "fromIp": "2603:10a6:803:81::32",
+      "expected": { "systemGenerated": true, "serviceIp": true, "internal": false }
+    },
+    {
+      "name": "french automatic reply, abbreviated and uppercase",
+      "subject": "RÉPONSE AUTO: absence",
+      "recipientAddress": "contact@client.test",
+      "fromIp": "40.107.13.25",
+      "expected": { "systemGenerated": true, "serviceIp": true, "internal": false }
+    },
+    {
+      "name": "english automatic reply",
+      "subject": "Automatic reply: Out of office",
+      "recipientAddress": "contact@client.test",
+      "fromIp": "104.47.55.138",
+      "expected": { "systemGenerated": true, "serviceIp": true, "internal": false }
+    },
+    {
+      "name": "out of office without the reply wording",
+      "subject": "Out of office - back on Monday",
+      "recipientAddress": "contact@client.test",
+      "fromIp": "52.100.1.1",
+      "expected": { "systemGenerated": true, "serviceIp": true, "internal": false }
+    },
+    {
+      "name": "non delivery report, english",
+      "subject": "Undeliverable: Facture 2026-08",
+      "recipientAddress": "contact@client.test",
+      "fromIp": "2a01:111:e400::1",
+      "expected": { "systemGenerated": true, "serviceIp": true, "internal": false }
+    },
+    {
+      "name": "non delivery report, french",
+      "subject": "Non-remis : Facture 2026-08",
+      "recipientAddress": "contact@client.test",
+      "fromIp": "2620:1ec:c11::200",
+      "expected": { "systemGenerated": true, "serviceIp": true, "internal": false }
+    },
+    {
+      "name": "delivery status notification",
+      "subject": "Delivery Status Notification: Failure",
+      "recipientAddress": "contact@client.test",
+      "fromIp": "40.92.10.1",
+      "expected": { "systemGenerated": true, "serviceIp": true, "internal": false }
+    },
+    {
+      "name": "german automatic reply, for a mixed-language tenant",
+      "subject": "Automatische Antwort: Urlaub",
+      "recipientAddress": "contact@client.test",
+      "fromIp": "198.51.100.7",
+      "expected": { "systemGenerated": true, "serviceIp": false, "internal": false }
+    },
+    {
+      "name": "ordinary work mail is not service traffic",
+      "subject": "Re: CV Alexandre",
+      "recipientAddress": "contact@client.test",
+      "fromIp": "198.51.100.7",
+      "expected": { "systemGenerated": false, "serviceIp": false, "internal": false }
+    },
+    {
+      "name": "a human forwarding an automatic reply stays human mail",
+      "subject": "RE: Réponse automatique : congés",
+      "recipientAddress": "contact@client.test",
+      "fromIp": "198.51.100.7",
+      "expected": { "systemGenerated": false, "serviceIp": false, "internal": false }
+    },
+    {
+      "name": "the wording alone, without the separator, is not a prefix",
+      "subject": "Automatic reply procedure for the helpdesk",
+      "recipientAddress": "contact@client.test",
+      "fromIp": "198.51.100.7",
+      "expected": { "systemGenerated": false, "serviceIp": false, "internal": false }
+    },
+    {
+      "name": "internal recipient, case-insensitive domain",
+      "subject": "Point hebdo",
+      "recipientAddress": "Colleague@CONTOSO.test",
+      "fromIp": "198.51.100.7",
+      "expected": { "systemGenerated": false, "serviceIp": false, "internal": true }
+    },
+    {
+      "name": "a subdomain is not the same domain",
+      "subject": "Point hebdo",
+      "recipientAddress": "colleague@mail.contoso.test",
+      "fromIp": "198.51.100.7",
+      "expected": { "systemGenerated": false, "serviceIp": false, "internal": false }
+    },
+    {
+      "name": "bracketed IPv6 from the trace",
+      "subject": "Facture",
+      "recipientAddress": "contact@client.test",
+      "fromIp": "[2603:10a6:803:81::32]",
+      "expected": { "systemGenerated": false, "serviceIp": true, "internal": false }
+    },
+    {
+      "name": "a range next to Microsoft's is not Microsoft's",
+      "subject": "Facture",
+      "recipientAddress": "contact@client.test",
+      "fromIp": "40.94.0.1",
+      "expected": { "systemGenerated": false, "serviceIp": false, "internal": false }
+    },
+    {
+      "name": "no submission address at all",
+      "subject": "Facture",
+      "recipientAddress": "contact@client.test",
+      "fromIp": "",
+      "expected": { "systemGenerated": false, "serviceIp": false, "internal": false }
+    },
+    {
+      "name": "attacker address in a documentation range",
+      "subject": "Mise a jour bancaire",
+      "recipientAddress": "buyer@client.test",
+      "fromIp": "203.0.113.42",
+      "expected": { "systemGenerated": false, "serviceIp": false, "internal": false }
+    }
+  ]
+}
