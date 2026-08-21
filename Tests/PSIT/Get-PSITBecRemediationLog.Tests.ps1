@@ -162,6 +162,47 @@ Describe 'Set-PSITBecIncident' {
             Should -Throw '*not a valid date*'
     }
 
+    It 'marks a new case TLP:AMBER+STRICT and keeps a deliberate widening' {
+        $Created = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u4' -Analyst 's.miro'
+        $Created.Tlp | Should -Be 'TLP:AMBER+STRICT'
+
+        $Widened = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u4' -Analyst 's.miro' -Tlp 'TLP:GREEN'
+        $Widened.Tlp | Should -Be 'TLP:GREEN'
+
+        # A later save that says nothing about the marking must not pull it back to the default.
+        $Untouched = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u4' -Analyst 's.miro' -Status 'contained'
+        $Untouched.Tlp | Should -Be 'TLP:GREEN'
+    }
+
+    It 'refuses a marking or an effect outside the enumeration' {
+        { Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u5' -Analyst 's.miro' -Tlp 'TLP:ORANGE' } |
+            Should -Throw
+        { Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u5' -Analyst 's.miro' -EffectDescription 'spam massif' } |
+            Should -Throw
+    }
+
+    It 'refuses a channel outside the enumeration, on the field and inside the list' {
+        # The constraint cannot live in the panel alone: a value posted straight to the endpoint
+        # would otherwise be printed in a client report.
+        { Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u6' -Analyst 's.miro' -DeliveryChannel 'Pigeon voyageur' } |
+            Should -Throw '*must be one of*'
+        { Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u6' -Analyst 's.miro' -ThirdPartiesNotified @(@{ Name = 'Banque'; Channel = 'Pigeon voyageur' }) } |
+            Should -Throw '*ThirdPartiesNotified.Channel*'
+
+        $Valid = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u6' -Analyst 's.miro' -DeliveryChannel 'courriel' -ThirdPartiesNotified @(@{ Name = 'Banque'; Channel = 'telephone' })
+        $Valid.DeliveryChannel | Should -Be 'courriel'
+    }
+
+    It 'keeps the related tickets and the free-text effect' {
+        $Incident = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u7' -Analyst 's.miro' `
+            -EffectDescription 'other' -EffectDescriptionOther 'exfiltration vers un partage tiers' `
+            -RelatedTickets @('T20260820.0014', 'T20260821.0002')
+
+        $Incident.EffectDescription | Should -Be 'other'
+        $Incident.EffectDescriptionOther | Should -Be 'exfiltration vers un partage tiers'
+        $Incident.RelatedTickets | Should -Contain 'T20260821.0002'
+    }
+
     It 'normalises timestamps to UTC' {
         $Incident = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro' -DetectedUtc '2026-08-20T11:00:00+02:00'
         $Incident.DetectedUtc | Should -Be '2026-08-20T09:00:00Z'

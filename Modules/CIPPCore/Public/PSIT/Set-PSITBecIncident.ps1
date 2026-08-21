@@ -61,6 +61,25 @@ function Set-PSITBecIncident {
         [string]$LikelyConsequences,
         [string]$ExecutiveNote,
 
+        # Marking of the report, per FIRST's Traffic Light Protocol. A property of the case, not a
+        # constant of the template: the controller may ask for a wider distribution, and the reports
+        # must then say so on every page rather than keep a stale AMBER+STRICT.
+        [ValidateSet('TLP:CLEAR', 'TLP:GREEN', 'TLP:AMBER', 'TLP:AMBER+STRICT', 'TLP:RED')]
+        [string]$Tlp,
+
+        # What the unauthorised access was followed by. An enumeration and never a deduction: the
+        # collection cannot tell a hijacked thread from a mass send, and the summary states it as
+        # fact.
+        [ValidateSet('mass-send', 'thread-hijack', 'both', 'access-only', 'other')]
+        [string]$EffectDescription,
+
+        # Only with EffectDescription = 'other'. Logged on save so the enumeration can be widened
+        # from real cases instead of guesses.
+        [string]$EffectDescriptionOther,
+
+        # Other tickets covering the same incident. The main ticket stays AutotaskTicket.
+        $RelatedTickets,
+
         # Who the report was handed to, when and how, and who acknowledged it. An incident report
         # is a piece of evidence in a dispute with an insurer or a client: "we told them" has to be
         # recorded at the time, not reconstructed from memory a year later.
@@ -108,6 +127,18 @@ function Set-PSITBecIncident {
         'PSIT-BEC-{0}-{1}' -f $ReferenceDate, ([guid]::NewGuid().ToString().Substring(0, 4).ToUpperInvariant())
     }
 
+    # The channel enumeration lives here as well as in the panel: a value typed straight into the
+    # endpoint would otherwise reach a client report, which is how "Pigeon voyageur" got printed.
+    $ValidChannels = @('courriel', 'telephone', 'portail', 'courrier')
+    $ValidateChannel = {
+        param($Value, $FieldName)
+        if ([string]::IsNullOrWhiteSpace($Value)) { return $null }
+        if ($ValidChannels -notcontains [string]$Value) {
+            throw "$FieldName must be one of: $($ValidChannels -join ', '). Received '$Value'."
+        }
+        return [string]$Value
+    }
+
     $Keep = {
         param($New, $OldValue)
         if ($null -ne $New -and -not [string]::IsNullOrWhiteSpace([string]$New)) { return $New }
@@ -118,6 +149,18 @@ function Set-PSITBecIncident {
         if ($null -ne $New) { return [string](@($New) | ConvertTo-Json -Depth 6 -Compress -AsArray) }
         if ($OldJson) { return [string]$OldJson }
         return '[]'
+    }
+
+    # Same constraint inside the list: one row with a fanciful channel is enough to discredit an
+    # annex.
+    if ($null -ne $ThirdPartiesNotified) {
+        foreach ($Row in @($ThirdPartiesNotified)) {
+            if ($Row -and $Row.Channel) { $null = & $ValidateChannel $Row.Channel 'ThirdPartiesNotified.Channel' }
+        }
+    }
+
+    if ($EffectDescription -eq 'other' -and -not [string]::IsNullOrWhiteSpace($EffectDescriptionOther)) {
+        Write-LogMessage -API 'PSITBecIncident' -tenant $TenantFilter -message "Effect description entered as free text on $($IncidentReference): $EffectDescriptionOther" -sev Info
     }
 
     $Entity = @{
@@ -136,9 +179,15 @@ function Set-PSITBecIncident {
         MailReadStatus          = & $Keep $MailReadStatus ([string]$Existing.MailReadStatus)
         LikelyConsequences      = & $Keep $LikelyConsequences ([string]$Existing.LikelyConsequences)
         ExecutiveNote           = & $Keep $ExecutiveNote ([string]$Existing.ExecutiveNote)
+        # Default applied on creation only, so a case marked TLP:GREEN on purpose is not silently
+        # pulled back to the stricter default by the next save.
+        Tlp                     = & $Keep $Tlp (& $Keep ([string]$Existing.Tlp) 'TLP:AMBER+STRICT')
+        EffectDescription       = & $Keep $EffectDescription ([string]$Existing.EffectDescription)
+        EffectDescriptionOther  = & $Keep $EffectDescriptionOther ([string]$Existing.EffectDescriptionOther)
+        RelatedTickets          = & $KeepList $RelatedTickets $Existing.RelatedTickets
         DeliveredTo             = & $Keep $DeliveredTo ([string]$Existing.DeliveredTo)
         DeliveredUtc            = & $Keep (& $ValidateStamp $DeliveredUtc 'DeliveredUtc') ([string]$Existing.DeliveredUtc)
-        DeliveryChannel         = & $Keep $DeliveryChannel ([string]$Existing.DeliveryChannel)
+        DeliveryChannel         = & $Keep (& $ValidateChannel $DeliveryChannel 'DeliveryChannel') ([string]$Existing.DeliveryChannel)
         AcknowledgedBy          = & $Keep $AcknowledgedBy ([string]$Existing.AcknowledgedBy)
         AcknowledgedUtc         = & $Keep (& $ValidateStamp $AcknowledgedUtc 'AcknowledgedUtc') ([string]$Existing.AcknowledgedUtc)
         ExternalActions         = & $KeepList $ExternalActions $Existing.ExternalActions

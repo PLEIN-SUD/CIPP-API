@@ -62,6 +62,12 @@ function Get-PSITBecIncident {
         MailReadStatus          = [string]$Row.MailReadStatus
         LikelyConsequences      = [string]$Row.LikelyConsequences
         ExecutiveNote           = [string]$Row.ExecutiveNote
+        # No stored value on a record opened before the field existed: the strictest marking is the
+        # safe default for a document already in circulation.
+        Tlp                     = if ($Row.Tlp) { [string]$Row.Tlp } else { 'TLP:AMBER+STRICT' }
+        EffectDescription       = [string]$Row.EffectDescription
+        EffectDescriptionOther  = [string]$Row.EffectDescriptionOther
+        RelatedTickets          = & $AsList $Row.RelatedTickets
         DeliveredTo             = [string]$Row.DeliveredTo
         DeliveredUtc            = [string]$Row.DeliveredUtc
         DeliveryChannel         = [string]$Row.DeliveryChannel
