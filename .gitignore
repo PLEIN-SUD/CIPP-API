@@ -28,3 +28,5 @@ proxyman.pem
 # Pester test runner artifacts (Invoke-CippTests.ps1 -CI / -Coverage)
 Tests/TestResults.xml
 Tests/coverage.xml
+# Artefact de Invoke-Pester -CI, pas un livrable.
+testResults.xml

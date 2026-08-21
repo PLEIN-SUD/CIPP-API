@@ -396,7 +396,9 @@
             }
             @{
                 id     = 'SuspectUser'
-                url    = "users/$($SuspectUser)?`$select=id,displayName,userPrincipalName,usageLocation,country,city"
+                # PSIT-CUSTOM-BEGIN: proxyAddresses, for the breach-exposure lookup
+                url    = "users/$($SuspectUser)?`$select=id,displayName,userPrincipalName,usageLocation,country,city,proxyAddresses"
+                # PSIT-CUSTOM-END
                 method = 'GET'
             }
         )
@@ -423,6 +425,37 @@
         $SuspectUserDetail = ($GraphResults | Where-Object { $_.id -eq 'SuspectUser' }).body
         if ($SuspectUserDetail.error) { $SuspectUserDetail = $null }
         $UsageLocation = if ([string]::IsNullOrWhiteSpace($SuspectUserDetail.usageLocation)) { $null } else { $SuspectUserDetail.usageLocation }
+
+        # PSIT-CUSTOM-BEGIN: public-breach exposure, snapshotted at collection time
+        # At collection and never at render: the report has to be reproducible, and a lookup while
+        # printing would make the document depend on the day it was printed and on a third party
+        # being up. proxyAddresses holds "SMTP:primary" and "smtp:alias" plus non-mail entries like
+        # SPO: and X500:, so only the SMTP ones are unwrapped and the callee filters the rest.
+        $PsitBreachAddresses = @(
+            $SuspectUserDetail.userPrincipalName
+            foreach ($ProxyAddress in @($SuspectUserDetail.proxyAddresses)) {
+                if ([string]$ProxyAddress -match '^(?i)smtp:(.+)$') { $Matches[1] }
+            }
+        )
+        try {
+            $PsitBreachExposure = Get-PSITBecBreachExposure -Addresses $PsitBreachAddresses
+        } catch {
+            # A breach lookup must never be the reason a dossier fails to collect: the report has a
+            # state for "could not check" and it is better than no dossier at all.
+            $PsitBreachError = Get-CippException -Exception $_
+            Write-LogMessage -API 'BECRun' -message "Breach exposure lookup failed for $($UserName): $($PsitBreachError.NormalizedError)" -tenant $TenantFilter -sev Warning
+            $PsitBreachExposure = @{
+                Status     = 'error'
+                Reason     = 'service indisponible'
+                CheckedUtc = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+                Source     = 'Have I Been Pwned (api/v3/breachedaccount)'
+                Addresses  = @()
+                Breaches   = @()
+                BreachCount = 0
+                PasswordCount = 0
+            }
+        }
+        # PSIT-CUSTOM-END
 
         # Flag service principals added during the window that match the malicious catalog
         $NewSPs = @(foreach ($SP in @($NewSPs)) {
@@ -605,6 +638,9 @@
             IntuneDevices            = @($IntuneDevices)
             IntuneDevicesError       = $IntuneDevicesError
             LocationAnalysis         = $LocationAnalysis
+            # PSIT-CUSTOM-BEGIN: the breach-exposure snapshot travels with the dossier
+            BreachExposure           = $PsitBreachExposure
+            # PSIT-CUSTOM-END
             AnalysisWindowDays       = 7
             ExtractedAt              = (Get-Date)
             ExtractResult            = $ExtractResult
