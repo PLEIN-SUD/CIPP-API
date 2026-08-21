@@ -37,14 +37,14 @@ Describe 'Get-PSITBecRemediationLog' {
         Mock -CommandName Write-LogMessage -MockWith { }
         Mock -CommandName Get-CIPPAzDataTableEntity -MockWith {
             @(
-                New-LogRow 'ExecBECRemediate' 'Reset password for p.martin@contoso.test' 's.miro@pleinsudit.com' 'Info' '2026-08-20T13:00:00Z'
-                New-LogRow 'ExecBECRemediate' 'Revoked sessions for p.martin@contoso.test' 's.miro@pleinsudit.com' 'Info' '2026-08-20T13:01:00Z'
-                New-LogRow 'ExecBECRemediate' 'Successfully disabled rule: Facturation for p.martin@contoso.test' 's.miro@pleinsudit.com' 'Info' '2026-08-20T13:02:00Z'
-                New-LogRow 'ExecBECRemediate' 'Could not disable rule for p.martin@contoso.test: access denied' 's.miro@pleinsudit.com' 'Error' '2026-08-20T13:03:00Z'
+                New-LogRow 'ExecBECRemediate' 'Reset password for p.martin@contoso.test' 'analyste@example.test' 'Info' '2026-08-20T13:00:00Z'
+                New-LogRow 'ExecBECRemediate' 'Revoked sessions for p.martin@contoso.test' 'analyste@example.test' 'Info' '2026-08-20T13:01:00Z'
+                New-LogRow 'ExecBECRemediate' 'Successfully disabled rule: Facturation for p.martin@contoso.test' 'analyste@example.test' 'Info' '2026-08-20T13:02:00Z'
+                New-LogRow 'ExecBECRemediate' 'Could not disable rule for p.martin@contoso.test: access denied' 'analyste@example.test' 'Error' '2026-08-20T13:03:00Z'
                 # Same endpoint, different mailbox: must not be attributed to this incident.
-                New-LogRow 'ExecBECRemediate' 'Reset password for someone.else@contoso.test' 's.miro@pleinsudit.com' 'Info' '2026-08-20T13:04:00Z'
+                New-LogRow 'ExecBECRemediate' 'Reset password for someone.else@contoso.test' 'analyste@example.test' 'Info' '2026-08-20T13:04:00Z'
                 # An unrelated endpoint that mentions the mailbox: not remediation.
-                New-LogRow 'ListUsers' 'Listed users including p.martin@contoso.test' 's.miro@pleinsudit.com' 'Info' '2026-08-20T13:05:00Z'
+                New-LogRow 'ListUsers' 'Listed users including p.martin@contoso.test' 'analyste@example.test' 'Info' '2026-08-20T13:05:00Z'
             )
         }
     }
@@ -75,7 +75,7 @@ Describe 'Get-PSITBecRemediationLog' {
 
     It 'records the operator, which is what makes the section an attestation' {
         $Result = Get-PSITBecRemediationLog -TenantFilter 'contoso.test' -UserPrincipalName 'p.martin@contoso.test' -SinceUtc ([datetime]'2026-08-20T00:00:00Z')
-        ($Result.ActionsPerformed | Where-Object { $_.Action -eq 'PasswordReset' }).Operator | Should -Be 's.miro@pleinsudit.com'
+        ($Result.ActionsPerformed | Where-Object { $_.Action -eq 'PasswordReset' }).Operator | Should -Be 'analyste@example.test'
     }
 
     It 'returns empty rather than throwing when the log holds nothing' {
@@ -110,25 +110,25 @@ Describe 'Set-PSITBecIncident' {
     }
 
     It 'generates a stable, readable reference on first save and keeps it afterwards' {
-        $First = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -UserPrincipalName 'p.martin@contoso.test' -Analyst 's.miro' -Status 'ongoing'
+        $First = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -UserPrincipalName 'p.martin@contoso.test' -Analyst 'analyste' -Status 'ongoing'
         $First.Reference | Should -Match '^PSIT-BEC-\d{8}-[0-9A-F]{4}$'
 
-        $Second = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro' -Status 'contained'
+        $Second = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 'analyste' -Status 'contained'
         $Second.Reference | Should -Be $First.Reference
         $Second.Status | Should -Be 'contained'
     }
 
     It 'dates the reference on the detection when the first save carries one' {
-        $Incident = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u2' -Analyst 's.miro' -DetectedUtc '2026-07-03T08:00:00Z'
+        $Incident = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u2' -Analyst 'analyste' -DetectedUtc '2026-07-03T08:00:00Z'
         $Incident.Reference | Should -Match '^PSIT-BEC-20260703-[0-9A-F]{4}$'
 
         # And never moves afterwards, even once the detection date is corrected.
-        $Updated = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u2' -Analyst 's.miro' -DetectedUtc '2026-08-01T08:00:00Z'
+        $Updated = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u2' -Analyst 'analyste' -DetectedUtc '2026-08-01T08:00:00Z'
         $Updated.Reference | Should -Be $Incident.Reference
     }
 
     It 'does not wipe a field that a later save leaves out' {
-        $null = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro' -LikelyConsequences 'Détournement de paiement' -DataCategories @('Données bancaires ou financières')
+        $null = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 'analyste' -LikelyConsequences 'Détournement de paiement' -DataCategories @('Données bancaires ou financières')
         $Updated = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 'a.other' -Status 'contained'
 
         $Updated.LikelyConsequences | Should -Be 'Détournement de paiement'
@@ -137,16 +137,16 @@ Describe 'Set-PSITBecIncident' {
     }
 
     It 'round-trips the Autotask ticket, which is the reference both reports quote' {
-        $Saved = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro' -AutotaskTicket 'T20260820.0042'
+        $Saved = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 'analyste' -AutotaskTicket 'T20260820.0042'
         $Saved.AutotaskTicket | Should -Be 'T20260820.0042'
 
         # A later save that only touches the status must not lose the business reference.
-        $Updated = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro' -Status 'contained'
+        $Updated = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 'analyste' -Status 'contained'
         $Updated.AutotaskTicket | Should -Be 'T20260820.0042'
     }
 
     It 'records the handover of the report, which is evidence in its own right' {
-        $Saved = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro' `
+        $Saved = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 'analyste' `
             -DeliveredTo 'Direction financière' -DeliveredUtc '2026-08-21T09:00:00Z' `
             -DeliveryChannel 'courriel' -AcknowledgedBy 'DAF' -AcknowledgedUtc '2026-08-21T10:30:00Z'
 
@@ -158,43 +158,43 @@ Describe 'Set-PSITBecIncident' {
     }
 
     It 'refuses an unparseable acknowledgement date rather than storing rubbish' {
-        { Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro' -AcknowledgedUtc 'la semaine derniere' } |
+        { Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 'analyste' -AcknowledgedUtc 'la semaine derniere' } |
             Should -Throw '*not a valid date*'
     }
 
     It 'marks a new case TLP:AMBER+STRICT and keeps a deliberate widening' {
-        $Created = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u4' -Analyst 's.miro'
+        $Created = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u4' -Analyst 'analyste'
         $Created.Tlp | Should -Be 'TLP:AMBER+STRICT'
 
-        $Widened = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u4' -Analyst 's.miro' -Tlp 'TLP:GREEN'
+        $Widened = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u4' -Analyst 'analyste' -Tlp 'TLP:GREEN'
         $Widened.Tlp | Should -Be 'TLP:GREEN'
 
         # A later save that says nothing about the marking must not pull it back to the default.
-        $Untouched = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u4' -Analyst 's.miro' -Status 'contained'
+        $Untouched = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u4' -Analyst 'analyste' -Status 'contained'
         $Untouched.Tlp | Should -Be 'TLP:GREEN'
     }
 
     It 'refuses a marking or an effect outside the enumeration' {
-        { Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u5' -Analyst 's.miro' -Tlp 'TLP:ORANGE' } |
+        { Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u5' -Analyst 'analyste' -Tlp 'TLP:ORANGE' } |
             Should -Throw
-        { Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u5' -Analyst 's.miro' -EffectDescription 'spam massif' } |
+        { Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u5' -Analyst 'analyste' -EffectDescription 'spam massif' } |
             Should -Throw
     }
 
     It 'refuses a channel outside the enumeration, on the field and inside the list' {
         # The constraint cannot live in the panel alone: a value posted straight to the endpoint
         # would otherwise be printed in a client report.
-        { Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u6' -Analyst 's.miro' -DeliveryChannel 'Pigeon voyageur' } |
+        { Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u6' -Analyst 'analyste' -DeliveryChannel 'Pigeon voyageur' } |
             Should -Throw '*must be one of*'
-        { Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u6' -Analyst 's.miro' -ThirdPartiesNotified @(@{ Name = 'Banque'; Channel = 'Pigeon voyageur' }) } |
+        { Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u6' -Analyst 'analyste' -ThirdPartiesNotified @(@{ Name = 'Banque'; Channel = 'Pigeon voyageur' }) } |
             Should -Throw '*ThirdPartiesNotified.Channel*'
 
-        $Valid = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u6' -Analyst 's.miro' -DeliveryChannel 'courriel' -ThirdPartiesNotified @(@{ Name = 'Banque'; Channel = 'telephone' })
+        $Valid = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u6' -Analyst 'analyste' -DeliveryChannel 'courriel' -ThirdPartiesNotified @(@{ Name = 'Banque'; Channel = 'telephone' })
         $Valid.DeliveryChannel | Should -Be 'courriel'
     }
 
     It 'keeps the related tickets and the free-text effect' {
-        $Incident = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u7' -Analyst 's.miro' `
+        $Incident = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u7' -Analyst 'analyste' `
             -EffectDescription 'other' -EffectDescriptionOther 'exfiltration vers un partage tiers' `
             -RelatedTickets @('T20260820.0014', 'T20260821.0002')
 
@@ -204,12 +204,12 @@ Describe 'Set-PSITBecIncident' {
     }
 
     It 'normalises timestamps to UTC' {
-        $Incident = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro' -DetectedUtc '2026-08-20T11:00:00+02:00'
+        $Incident = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 'analyste' -DetectedUtc '2026-08-20T11:00:00+02:00'
         $Incident.DetectedUtc | Should -Be '2026-08-20T09:00:00Z'
     }
 
     It 'refuses a date it cannot parse rather than storing rubbish' {
-        { Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro' -DetectedUtc 'hier soir' } | Should -Throw '*not a valid date*'
+        { Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 'analyste' -DetectedUtc 'hier soir' } | Should -Throw '*not a valid date*'
     }
 
     It 'keeps the creator distinct from the last editor' {
@@ -262,8 +262,8 @@ Describe 'Close-PSITBecIncident' {
     }
 
     It 'archives the case and frees the slot, so the next save opens a new one' {
-        $First = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro' -DetectedUtc '2026-08-20T09:00:00Z' -LikelyConsequences 'Détournement de paiement'
-        $Closure = Close-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro' -ClosureNote 'Confinée et validée par le client'
+        $First = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 'analyste' -DetectedUtc '2026-08-20T09:00:00Z' -LikelyConsequences 'Détournement de paiement'
+        $Closure = Close-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 'analyste' -ClosureNote 'Confinée et validée par le client'
 
         $Closure.Closed | Should -BeTrue
         $Closure.Reference | Should -Be $First.Reference
@@ -273,33 +273,33 @@ Describe 'Close-PSITBecIncident' {
         $Fresh.Exists | Should -BeFalse
         $Fresh.LikelyConsequences | Should -BeNullOrEmpty
 
-        $Second = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro' -DetectedUtc '2026-11-02T07:00:00Z'
+        $Second = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 'analyste' -DetectedUtc '2026-11-02T07:00:00Z'
         $Second.Reference | Should -Not -Be $First.Reference
         $Second.Reference | Should -Match '^PSIT-BEC-20261102-'
         $Second.LikelyConsequences | Should -BeNullOrEmpty
     }
 
     It 'keeps the closed case readable, because a repeat compromise is a finding' {
-        $First = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro' -DetectedUtc '2026-08-20T09:00:00Z' -Status 'contained'
-        $null = Close-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro'
-        $null = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro' -DetectedUtc '2026-11-02T07:00:00Z'
+        $First = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 'analyste' -DetectedUtc '2026-08-20T09:00:00Z' -Status 'contained'
+        $null = Close-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 'analyste'
+        $null = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 'analyste' -DetectedUtc '2026-11-02T07:00:00Z'
 
         $Current = Get-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1'
         $Current.RepeatOffence | Should -BeTrue
         @($Current.PreviousCases).Count | Should -Be 1
         $Current.PreviousCases[0].Reference | Should -Be $First.Reference
-        $Current.PreviousCases[0].ClosedBy | Should -Be 's.miro'
+        $Current.PreviousCases[0].ClosedBy | Should -Be 'analyste'
     }
 
     It 'archives the determinations with their case, so they cannot silence a later signal' {
-        $null = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro'
+        $null = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 'analyste'
         $script:Store['PSITBecTriage']['u1'] = [pscustomobject]@{
             PartitionKey   = 'contoso.test'
             RowKey         = 'u1'
             Determinations = '[{"SignalId":"signin-ip:203.0.113.42","Verdict":"expected"}]'
         }
 
-        $Closure = Close-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro'
+        $Closure = Close-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 'analyste'
 
         $Closure.ArchivedDeterminations | Should -Be 1
         $script:Store['PSITBecTriage'].ContainsKey('u1') | Should -BeFalse
@@ -307,14 +307,14 @@ Describe 'Close-PSITBecIncident' {
     }
 
     It 'archives the collection, which upstream would otherwise overwrite on the next run' {
-        $null = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro'
+        $null = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 'analyste'
         $script:Store['cachebec']['u1'] = [pscustomobject]@{
             PartitionKey = 'bec'
             RowKey       = 'u1'
             Results      = '{"ExtractedAt":"2026-08-20T10:32:00Z","SentMessages":[]}'
         }
 
-        $Closure = Close-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 's.miro'
+        $Closure = Close-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u1' -Analyst 'analyste'
 
         $Closure.CollectionArchived | Should -BeTrue
         $Archived = $script:Store['PSITBecCollections']["u1_$($Closure.Reference)"]
@@ -323,15 +323,15 @@ Describe 'Close-PSITBecIncident' {
     }
 
     It 'closes the case even when there is no collection left to archive' {
-        $null = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u3' -Analyst 's.miro'
-        $Closure = Close-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u3' -Analyst 's.miro'
+        $null = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u3' -Analyst 'analyste'
+        $Closure = Close-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'u3' -Analyst 'analyste'
 
         $Closure.Closed | Should -BeTrue
         $Closure.CollectionArchived | Should -BeFalse
     }
 
     It 'refuses to close a mailbox that has no open case' {
-        $Closure = Close-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'never-seen' -Analyst 's.miro'
+        $Closure = Close-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'never-seen' -Analyst 'analyste'
         $Closure.Closed | Should -BeFalse
         $Closure.Reason | Should -Match 'nothing to close'
     }
