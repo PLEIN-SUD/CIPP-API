@@ -72,6 +72,8 @@ function Get-PSITBecIncident {
         DeliveredUtc            = [string]$Row.DeliveredUtc
         DeliveryChannel         = [string]$Row.DeliveryChannel
         AcknowledgedBy          = [string]$Row.AcknowledgedBy
+        FollowUpDecision        = [string]$Row.FollowUpDecision
+        FollowUpDecisionUtc     = [string]$Row.FollowUpDecisionUtc
         AcknowledgedUtc         = [string]$Row.AcknowledgedUtc
         ExternalActions         = & $AsList $Row.ExternalActions
         ThirdPartiesNotified    = & $AsList $Row.ThirdPartiesNotified

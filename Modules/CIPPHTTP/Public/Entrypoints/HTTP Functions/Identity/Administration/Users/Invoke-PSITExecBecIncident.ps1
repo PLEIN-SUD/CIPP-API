@@ -65,6 +65,7 @@ Function Invoke-PSITExecBecIncident {
             'affectedPersonsBasis', 'mailReadStatus', 'likelyConsequences', 'executiveNote',
             'externalActions', 'thirdPartiesNotified',
             'deliveredTo', 'deliveredUtc', 'deliveryChannel', 'acknowledgedBy', 'acknowledgedUtc',
+            'followUpDecision', 'followUpDecisionUtc',
             'tlp', 'effectDescription', 'effectDescriptionOther', 'relatedTickets'
         )) {
         if ($null -ne $Body.$Field) {

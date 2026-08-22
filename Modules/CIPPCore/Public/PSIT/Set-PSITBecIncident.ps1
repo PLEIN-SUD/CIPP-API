@@ -89,6 +89,16 @@ function Set-PSITBecIncident {
         [string]$AcknowledgedBy,
         [string]$AcknowledgedUtc,
 
+        # What the client decided to do with the report: notify, file a complaint, declare to the
+        # insurer, nothing. This replaces a handwritten box in the PDF that nobody ever filled in.
+        #
+        # It is the only evidence of what the client did with the document, and the counterpart of
+        # their duty to notify - so it is recorded here, in a system we control, rather than assumed
+        # to exist in the PSA. There is no Autotask integration in this repository: AutotaskTicket is
+        # a string an analyst types, nothing reads or writes the ticket itself.
+        [string]$FollowUpDecision,
+        [string]$FollowUpDecisionUtc,
+
         # Actions taken outside CIPP: the bank called, a supplier warned, a complaint filed. Kept
         # separate from the CIPP log so the report can say which is attested and which is declared.
         $ExternalActions,
@@ -188,6 +198,8 @@ function Set-PSITBecIncident {
         DeliveredTo             = & $Keep $DeliveredTo ([string]$Existing.DeliveredTo)
         DeliveredUtc            = & $Keep (& $ValidateStamp $DeliveredUtc 'DeliveredUtc') ([string]$Existing.DeliveredUtc)
         DeliveryChannel         = & $Keep (& $ValidateChannel $DeliveryChannel 'DeliveryChannel') ([string]$Existing.DeliveryChannel)
+        FollowUpDecision        = & $Keep $FollowUpDecision ([string]$Existing.FollowUpDecision)
+        FollowUpDecisionUtc     = & $Keep (& $ValidateStamp $FollowUpDecisionUtc 'FollowUpDecisionUtc') ([string]$Existing.FollowUpDecisionUtc)
         AcknowledgedBy          = & $Keep $AcknowledgedBy ([string]$Existing.AcknowledgedBy)
         AcknowledgedUtc         = & $Keep (& $ValidateStamp $AcknowledgedUtc 'AcknowledgedUtc') ([string]$Existing.AcknowledgedUtc)
         ExternalActions         = & $KeepList $ExternalActions $Existing.ExternalActions
