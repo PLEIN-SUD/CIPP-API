@@ -56,7 +56,7 @@ Describe 'Set-PSITSocCase, creation' {
     }
 
     It 'requires Source, TypeId and Title to create' {
-        { Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -Source 'cyna' -Title 'x' } |
+        { Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -Source 'extsoc' -Title 'x' } |
             Should -Throw '*requires TypeId*'
     }
 
@@ -82,7 +82,7 @@ Describe 'Set-PSITSocCase, qualification' {
         Reset-Store
         Enable-StoreMocks
         Mock -CommandName Write-LogMessage -MockWith { }
-        $script:Case = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -Source 'cyna' -TypeId 2 -Title 'Voyage impossible p.martin'
+        $script:Case = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -Source 'extsoc' -TypeId 2 -Title 'Voyage impossible p.martin'
     }
 
     It 'records the verdict with the analyst and a timestamp, and derives the status' {
@@ -198,11 +198,11 @@ Describe 'Get-PSITSocCase' {
     }
 
     It 'filters by status and source in memory' {
-        $null = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -Source 'cyna' -TypeId 1 -Title 'Connexion Suisse'
+        $null = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -Source 'extsoc' -TypeId 1 -Title 'Connexion Suisse'
         $Tp = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -Source 'xdr' -TypeId 15 -Title 'Infostealer'
         $null = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -CaseId $Tp.CaseId -Verdict 'true-positive'
 
-        @(Get-PSITSocCase -TenantFilter 'contoso.test' -Source 'cyna').Count | Should -Be 1
+        @(Get-PSITSocCase -TenantFilter 'contoso.test' -Source 'extsoc').Count | Should -Be 1
         @(Get-PSITSocCase -TenantFilter 'contoso.test' -Status 'qualified-tp').Count | Should -Be 1
         @(Get-PSITSocCase -TenantFilter 'contoso.test' -Status 'qualified-tp')[0].Title | Should -Be 'Infostealer'
     }
@@ -211,7 +211,7 @@ Describe 'Get-PSITSocCase' {
         $script:Store['contoso.test|PSIT-SOC-20260824-DEAD'] = [pscustomobject]@{
             PartitionKey = 'contoso.test'
             RowKey       = 'PSIT-SOC-20260824-DEAD'
-            Source       = 'cyna'
+            Source       = 'extsoc'
             TypeId       = '1'
             Status       = 'new'
             Title        = 'Cas au JSON abîmé'

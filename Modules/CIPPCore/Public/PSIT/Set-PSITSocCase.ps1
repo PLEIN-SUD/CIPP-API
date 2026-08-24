@@ -41,7 +41,7 @@ function Set-PSITSocCase {
 
         [string]$Title,
 
-        [ValidateSet('cyna', 'xdr', 'mdo', 'manual')]
+        [ValidateSet('extsoc', 'xdr', 'mdo', 'manual')]
         [string]$Source,
 
         [ValidateRange(1, 18)]

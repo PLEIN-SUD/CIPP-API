@@ -26,10 +26,11 @@ function Get-PSITSocCase {
         [ValidateSet('new', 'investigating', 'qualified-fp', 'qualified-tp', 'contained', 'closed')]
         [string]$Status,
 
-        [ValidateSet('cyna', 'xdr', 'mdo', 'manual')]
+        [ValidateSet('extsoc', 'xdr', 'mdo', 'manual')]
         [string]$Source,
 
-        # External alert or incident reference (CYNA number, Defender incident id). Used by the
+        # External alert or incident reference (the external SOC's alert number, a Defender incident
+        # id). Used by the
         # adoption flow to find an already-created case before creating a duplicate.
         [string]$ExternalRef
     )
