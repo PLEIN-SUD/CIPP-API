@@ -66,7 +66,11 @@ Describe 'coverage against the entrypoint sources' {
     }
 
     It 'documents every function marked Entrypoint' {
-        $Missing = @($script:Sources | Where-Object { -not $script:Spec.paths.ContainsKey("/api/$($_.Endpoint)") })
+        # PSIT-CUSTOM-BEGIN: openapi.json is an upstream-generated artifact (its generator lives
+        # outside this repository), so the fork's PSIT endpoints can never appear in it - and not
+        # being projected into the MCP tool list is the intended policy for them anyway.
+        $Missing = @($script:Sources | Where-Object { $_.Endpoint -notlike 'PSIT*' -and -not $script:Spec.paths.ContainsKey("/api/$($_.Endpoint)") })
+        # PSIT-CUSTOM-END
         $Missing.Endpoint | Should -BeNullOrEmpty -Because 'an undocumented endpoint is also an endpoint MCP cannot see'
     }
 
