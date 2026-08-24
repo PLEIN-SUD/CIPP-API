@@ -32,6 +32,44 @@ BeforeAll {
     }
 }
 
+# Regression guard for the incident save. The panel sends '' for every field the analyst has not
+# filled, and these parameters carry a ValidateSet: passing the blank through is what made a whole
+# save fail because one optional field was untouched. The endpoint must omit blanks, and these
+# tests pin the constraint it is protecting against, so relaxing the guard fails loudly here.
+Describe 'Set-PSITBecIncident rejects blanks on its validated fields' {
+    BeforeEach {
+        Mock -CommandName Write-LogMessage -MockWith { }
+        Mock -CommandName Get-CIPPAzDataTableEntity -MockWith { $null }
+        Mock -CommandName Add-CIPPAzDataTableEntity -MockWith { }
+    }
+
+    It 'refuses an empty string on every validated field' {
+        foreach ($Field in @('EffectDescription', 'Status', 'MailReadStatus', 'Tlp')) {
+            {
+                $Parameters = @{
+                    TenantFilter = 'contoso.test'
+                    UserId       = 'user-guid'
+                    Analyst      = 'analyste@example.test'
+                    $Field       = ''
+                }
+                Set-PSITBecIncident @Parameters
+            } | Should -Throw
+        }
+    }
+
+    It 'saves when those fields are simply not sent, which is what omitting a blank does' {
+        # Asserting on what was written rather than on what is returned: the function re-reads the
+        # record through Get-PSITBecIncident, which the mocked table answers empty.
+        $script:Written = $null
+        Mock -CommandName Add-CIPPAzDataTableEntity -MockWith { $script:Written = $Entity }
+
+        $null = Set-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'user-guid' -Analyst 'analyste@example.test' -AutotaskTicket 'T20260820.0042'
+
+        $script:Written.AutotaskTicket | Should -Be 'T20260820.0042'
+        $script:Written.Reference | Should -Match '^PSIT-BEC-'
+    }
+}
+
 Describe 'Get-PSITBecRemediationLog' {
     BeforeEach {
         Mock -CommandName Write-LogMessage -MockWith { }

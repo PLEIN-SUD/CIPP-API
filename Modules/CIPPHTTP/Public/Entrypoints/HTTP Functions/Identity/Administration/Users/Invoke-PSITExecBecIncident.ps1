@@ -68,10 +68,16 @@ Function Invoke-PSITExecBecIncident {
             'followUpDecision', 'followUpDecisionUtc',
             'tlp', 'effectDescription', 'effectDescriptionOther', 'relatedTickets'
         )) {
-        if ($null -ne $Body.$Field) {
-            # Set-PSITBecIncident uses PascalCase parameter names.
-            $Parameters[($Field.Substring(0, 1).ToUpperInvariant() + $Field.Substring(1))] = $Body.$Field
-        }
+        $Value = $Body.$Field
+        # An empty string is not a value: the panel sends '' for every field the analyst has not
+        # filled, and four of the target parameters carry a ValidateSet that rejects '' outright -
+        # which failed the whole save because one optional field was untouched. Omitting a blank
+        # is also exactly what Set-PSITBecIncident does with one internally (blank means keep),
+        # so nothing is lost by not sending it.
+        if ($null -eq $Value) { continue }
+        if ($Value -is [string] -and [string]::IsNullOrWhiteSpace($Value)) { continue }
+        # Set-PSITBecIncident uses PascalCase parameter names.
+        $Parameters[($Field.Substring(0, 1).ToUpperInvariant() + $Field.Substring(1))] = $Value
     }
 
     try {
