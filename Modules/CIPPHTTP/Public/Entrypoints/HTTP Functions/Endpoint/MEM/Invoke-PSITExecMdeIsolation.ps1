@@ -14,10 +14,12 @@ Function Invoke-PSITExecMdeIsolation {
     [CmdletBinding()]
     param($Request, $TriggerMetadata)
 
-    $TenantFilter = $Request.Body.tenantFilter
-    $AzureADDeviceId = $Request.Body.AzureADDeviceId
-    $Comment = $Request.Body.Comment
-    $Release = $Request.Body.Release -eq $true
+    # Unwrapped: a device picked from an autocomplete arrives as {label, value}, and an
+    # identifier read raw would isolate nothing while reporting no error.
+    $TenantFilter = Get-PSITSocRequestValue -Value $Request.Body.tenantFilter
+    $AzureADDeviceId = Get-PSITSocRequestValue -Value $Request.Body.AzureADDeviceId
+    $Comment = Get-PSITSocRequestValue -Value $Request.Body.Comment
+    $Release = (Get-PSITSocRequestValue -Value $Request.Body.Release) -eq $true
 
     if ([string]::IsNullOrWhiteSpace($TenantFilter) -or [string]::IsNullOrWhiteSpace($AzureADDeviceId)) {
         return ([HttpResponseContext]@{

@@ -14,9 +14,11 @@ Function Invoke-PSITExecRevokeAppConsent {
     [CmdletBinding()]
     param($Request, $TriggerMetadata)
 
-    $TenantFilter = $Request.Body.tenantFilter
-    $ServicePrincipalId = $Request.Body.ServicePrincipalId
-    $AppId = $Request.Body.AppId
+    # Unwrapped: an application picked from an autocomplete arrives as {label, value}, and a
+    # raw read would look up an object instead of an appId.
+    $TenantFilter = Get-PSITSocRequestValue -Value $Request.Body.tenantFilter
+    $ServicePrincipalId = Get-PSITSocRequestValue -Value $Request.Body.ServicePrincipalId
+    $AppId = Get-PSITSocRequestValue -Value $Request.Body.AppId
 
     if ([string]::IsNullOrWhiteSpace($TenantFilter)) {
         return ([HttpResponseContext]@{

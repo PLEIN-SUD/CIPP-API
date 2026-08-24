@@ -17,7 +17,11 @@ Function Invoke-PSITExecSocCase {
     [CmdletBinding()]
     param($Request, $TriggerMetadata)
 
-    $TenantFilter = $Request.Body.tenantFilter
+    # Every scalar goes through the unwrapper: the frontend's autoComplete submits {label, value}
+    # rather than the value, and a field that misses this fails either loudly (a validated
+    # parameter throws) or silently (a loosely parsed one is dropped, and the case is created
+    # without it).
+    $TenantFilter = Get-PSITSocRequestValue -Value $Request.Body.tenantFilter
 
     if ([string]::IsNullOrWhiteSpace($TenantFilter)) {
         return ([HttpResponseContext]@{
@@ -37,11 +41,12 @@ Function Invoke-PSITExecSocCase {
     # Scalars pass through when present; Set-PSITSocCase owns the validation so the rules live
     # in one place whatever the caller.
     foreach ($Name in @('CaseId', 'Title', 'Source', 'Severity', 'Status', 'ExternalRef', 'TicketRef', 'Verdict', 'Justification')) {
-        $Value = $Request.Body.$Name
+        $Value = Get-PSITSocRequestValue -Value $Request.Body.$Name
         if (-not [string]::IsNullOrWhiteSpace($Value)) { $Parameters.$Name = [string]$Value }
     }
-    if ($null -ne $Request.Body.TypeId -and "$($Request.Body.TypeId)" -match '^\d+$') {
-        $Parameters.TypeId = [int]$Request.Body.TypeId
+    $TypeId = Get-PSITSocRequestValue -Value $Request.Body.TypeId
+    if ($null -ne $TypeId -and "$TypeId" -match '^\d+$') {
+        $Parameters.TypeId = [int]$TypeId
     }
     if ($null -ne $Request.Body.Entities) { $Parameters.Entities = $Request.Body.Entities }
     if ($null -ne $Request.Body.GuideProgress) { $Parameters.GuideProgress = @($Request.Body.GuideProgress) }

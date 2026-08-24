@@ -14,10 +14,12 @@ Function Invoke-PSITExecMailRemediate {
     [CmdletBinding()]
     param($Request, $TriggerMetadata)
 
-    $TenantFilter = $Request.Body.tenantFilter
-    $NetworkMessageId = $Request.Body.NetworkMessageId
-    $Recipients = @($Request.Body.Recipients | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-    $ReceivedUtc = $Request.Body.ReceivedUtc
+    # Unwrapped: recipients picked from a multi-select arrive as {label, value} entries, and a
+    # raw read would purge nothing while claiming a recipient list.
+    $TenantFilter = Get-PSITSocRequestValue -Value $Request.Body.tenantFilter
+    $NetworkMessageId = Get-PSITSocRequestValue -Value $Request.Body.NetworkMessageId
+    $Recipients = @(Get-PSITSocRequestValue -Value $Request.Body.Recipients | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $ReceivedUtc = Get-PSITSocRequestValue -Value $Request.Body.ReceivedUtc
 
     if ([string]::IsNullOrWhiteSpace($TenantFilter) -or [string]::IsNullOrWhiteSpace($NetworkMessageId)) {
         return ([HttpResponseContext]@{
