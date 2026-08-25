@@ -57,6 +57,22 @@ Describe 'Resolve-PSITSocTenant' {
     It 'says how it resolved, so the case can record it' {
         (Resolve-PSITSocTenant -Name 'cust-3' -Tenants $script:Tenants).Method | Should -Be 'exact customerId'
     }
+
+    It 'separates a name nobody recognises from a name two clients answer to' {
+        # The webhook branches on this and nothing else. A name matching nothing belongs, in
+        # practice, to a client managed outside this portal: no case is opened for it, because a
+        # case no screen here can investigate teaches the analyst to skip rows. A name matching
+        # two clients is a managed client that needs disambiguating, and dropping it would lose a
+        # real alert, so that one is filed under 'unmapped' for an analyst to reassign.
+        (Resolve-PSITSocTenant -Name 'Someone Else' -Tenants $script:Tenants).Reason | Should -Be 'unknown'
+        (Resolve-PSITSocTenant -Name 'Contoso' -Tenants $script:Tenants).Reason | Should -Be 'ambiguous'
+        (Resolve-PSITSocTenant -Name 'cust-3' -Tenants $script:Tenants).Reason | Should -Be 'matched'
+    }
+
+    It 'treats an empty name and an empty tenant list as unknown, not as ambiguous' {
+        (Resolve-PSITSocTenant -Name '' -Tenants $script:Tenants).Reason | Should -Be 'unknown'
+        (Resolve-PSITSocTenant -Name 'x' -Tenants @()).Reason | Should -Be 'unknown'
+    }
 }
 
 Describe 'the ingestion webhook secret' {

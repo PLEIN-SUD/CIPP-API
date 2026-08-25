@@ -20,9 +20,16 @@ function Resolve-PSITSocTenant {
         the wrong client is worse than a case an analyst has to reassign, because nobody goes
         looking for it.
 
+        A name matching nothing at all and a name matching two clients are different facts, and
+        the caller acts on them differently. A name nobody recognises usually belongs to a client
+        this portal does not manage, which has no case to open here. Two candidates is a managed
+        client whose name needs disambiguating, and dropping that one would lose a real alert. So
+        the answer carries which of the two it is.
+
     .OUTPUTS
-        An object carrying Tenant (the defaultDomainName, or 'unmapped') and Method (how it was
-        matched, or why it was not), so the case says how it got its tenant.
+        An object carrying Tenant (the defaultDomainName, or 'unmapped'), Reason ('matched',
+        'ambiguous' or 'unknown') and Method (how it was matched, or why it was not), so the case
+        says how it got its tenant.
     #>
     [CmdletBinding()]
     param(
@@ -35,7 +42,7 @@ function Resolve-PSITSocTenant {
         $Tenants
     )
 
-    $Unmapped = [pscustomobject]@{ Tenant = 'unmapped'; Method = 'no name supplied' }
+    $Unmapped = [pscustomobject]@{ Tenant = 'unmapped'; Reason = 'unknown'; Method = 'no name supplied' }
     if ([string]::IsNullOrWhiteSpace($Name)) { return $Unmapped }
 
     $Normalise = {
@@ -57,11 +64,12 @@ function Resolve-PSITSocTenant {
         if ($Exact.Count -eq 1) {
             return [pscustomobject]@{
                 Tenant = [string]$Exact[0].defaultDomainName
+                Reason = 'matched'
                 Method = "exact $Property"
             }
         }
         if ($Exact.Count -gt 1) {
-            return [pscustomobject]@{ Tenant = 'unmapped'; Method = "ambiguous $Property" }
+            return [pscustomobject]@{ Tenant = 'unmapped'; Reason = 'ambiguous'; Method = "ambiguous $Property" }
         }
     }
 
@@ -69,12 +77,13 @@ function Resolve-PSITSocTenant {
     if ($Starting.Count -eq 1) {
         return [pscustomobject]@{
             Tenant = [string]$Starting[0].defaultDomainName
+            Reason = 'matched'
             Method = 'displayName prefix'
         }
     }
     if ($Starting.Count -gt 1) {
-        return [pscustomobject]@{ Tenant = 'unmapped'; Method = 'ambiguous displayName prefix' }
+        return [pscustomobject]@{ Tenant = 'unmapped'; Reason = 'ambiguous'; Method = 'ambiguous displayName prefix' }
     }
 
-    return [pscustomobject]@{ Tenant = 'unmapped'; Method = 'no match' }
+    return [pscustomobject]@{ Tenant = 'unmapped'; Reason = 'unknown'; Method = 'no match' }
 }
