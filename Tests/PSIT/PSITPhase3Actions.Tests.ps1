@@ -10,6 +10,7 @@ BeforeAll {
     $RepoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSCommandPath))
     . (Join-Path $RepoRoot 'Modules/CIPPCore/Public/PSIT/Set-PSITMdeIsolation.ps1')
     . (Join-Path $RepoRoot 'Modules/CIPPCore/Public/PSIT/Invoke-PSITMailRemediation.ps1')
+    . (Join-Path $RepoRoot 'Modules/CIPPCore/Public/PSIT/Get-PSITMailEvidence.ps1')
 
     function New-GraphGetRequest { param($uri, $tenantid, $scope, $AsApp) }
     function New-GraphPOSTRequest { param($uri, $tenantid, $body, $scope, $AsApp, $type) }
@@ -121,7 +122,7 @@ Describe 'Invoke-PSITMailRemediation' {
 
     It 'refuses an identifier that is not a message id' {
         { Invoke-PSITMailRemediation -TenantFilter 'contoso.test' -NetworkMessageId 'not-a-guid' -Analyst 'a' } |
-            Should -Throw '*must be a valid GUID*'
+            Should -Throw '*is not a network message id*'
     }
 
     It 'says the message was not found rather than reporting an empty success' {

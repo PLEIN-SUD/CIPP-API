@@ -44,41 +44,25 @@ function Invoke-PSITMailRemediation {
         [string]$Analyst
     )
 
-    $MessageGuid = [guid]::Empty
-    if (-not [guid]::TryParse($NetworkMessageId, [ref]$MessageGuid)) {
-        throw "NetworkMessageId must be a valid GUID: '$NetworkMessageId'."
+    # The same read the evidence panel uses. Two copies of this lookup would drift, and the drift
+    # would surface as a panel saying the message reached four people and a purge finding nothing.
+    $Evidence = Get-PSITMailEvidence -TenantFilter $TenantFilter -NetworkMessageId $NetworkMessageId -ReceivedUtc $ReceivedUtc
+
+    if (-not $Evidence.Metadata.Found) {
+        throw "No analyzed email found for $NetworkMessageId between $($Evidence.Metadata.WindowStart) and $($Evidence.Metadata.WindowEnd). The message may be outside the window, or Defender for Office 365 Plan 2 may not cover this tenant."
     }
 
-    $Now = (Get-Date).ToUniversalTime()
-    $Received = $null
-    if (-not [string]::IsNullOrWhiteSpace($ReceivedUtc)) {
-        try { $Received = ([datetime]$ReceivedUtc).ToUniversalTime() } catch { $Received = $null }
-    }
-    if ($Received) {
-        $StartDate = $Received.AddDays(-1)
-        $EndDate = $Received.AddDays(1)
-    } else {
-        $StartDate = $Now.AddDays(-15)
-        $EndDate = $Now
-    }
-    if ($EndDate -gt $Now) { $EndDate = $Now }
-    $StartTime = $StartDate.ToString('yyyy-MM-ddTHH:mm:ssZ')
-    $EndTime = $EndDate.ToString('yyyy-MM-ddTHH:mm:ssZ')
-
-    $Filter = [System.Uri]::EscapeDataString("networkMessageId eq '$($MessageGuid.Guid)'")
-    $Analyzed = @(New-GraphGetRequest -uri "https://graph.microsoft.com/beta/security/collaboration/analyzedEmails?startTime=$StartTime&endTime=$EndTime&`$filter=$Filter" -tenantid $TenantFilter -AsApp $true)
-
-    if ($Analyzed.Count -eq 0) {
-        throw "No analyzed email found for $($MessageGuid.Guid) between $StartTime and $EndTime. The message may be outside the window, or Defender for Office 365 Plan 2 may not cover this tenant."
-    }
+    # After the check, never before: on an empty answer there is no message to read the id from,
+    # and the cast would throw over the sentence explaining what happened.
+    $MessageGuid = [guid]$Evidence.Message.NetworkMessageId
 
     # One analyzed email per recipient: the purge targets the copies, so the recipient filter
     # applies here rather than in the API call.
     $Targets = if ($Recipients -and @($Recipients).Count -gt 0) {
         $Wanted = @($Recipients | ForEach-Object { $_.ToLowerInvariant() })
-        @($Analyzed | Where-Object { $Wanted -contains [string]$_.recipientEmailAddress.ToLowerInvariant() })
+        @($Evidence.Recipients | Where-Object { $Wanted -contains [string]$_.Recipient.ToLowerInvariant() })
     } else {
-        $Analyzed
+        @($Evidence.Recipients)
     }
     if ($Targets.Count -eq 0) {
         throw 'None of the recipients requested received this message according to Defender.'
@@ -91,8 +75,8 @@ function Invoke-PSITMailRemediation {
         analyzedEmailIdentifiers = @(
             foreach ($Email in $Targets) {
                 @{
-                    networkMessageId      = [string]$Email.networkMessageId
-                    recipientEmailAddress = [string]$Email.recipientEmailAddress
+                    networkMessageId      = [string]$MessageGuid.Guid
+                    recipientEmailAddress = [string]$Email.Recipient
                 }
             }
         )
@@ -105,7 +89,7 @@ function Invoke-PSITMailRemediation {
     return [pscustomobject]@{
         NetworkMessageId = $MessageGuid.Guid
         Action           = 'softDelete'
-        Recipients       = @($Targets | ForEach-Object { [string]$_.recipientEmailAddress })
+        Recipients       = @($Targets | ForEach-Object { [string]$_.Recipient })
         Submitted        = $true
         Results          = @([pscustomobject]@{
                 resultText = "Soft delete submitted for $($Targets.Count) copy/copies of the message. Confirm completion in the Defender portal."
