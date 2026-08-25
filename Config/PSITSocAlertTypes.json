@@ -1,0 +1,174 @@
+{
+  "comment": [
+    "Subject label to CIPP alert type, derived from the external SOC alert taxonomy.",
+    "Derived, never copied. The source carries client names, real user principal names and real",
+    "hostnames; this repository is public, so only identifiers and match patterns cross over.",
+    "Order matters: patterns are tried top to bottom and the first match wins. The binary activity",
+    "pattern matches almost any subject starting with \"Activite\", so it comes last.",
+    "Status ACTIVE: observed in production. REDUCED: the emitter is moving it off this channel.",
+    "WATCH: the rule exists upstream but no message carrying it has been observed, so a match is",
+    "informative and nothing should be counted on it yet.",
+    "TypeId 99 is the catch-all: an alert whose label matches nothing still opens a case, because",
+    "a type nobody recognised is a taxonomy to extend, never an alert to drop."
+  ],
+  "catchAllTypeId": 99,
+  "patterns": [
+    {
+      "LabelId": "IDENT_MULTI_COUNTRY",
+      "TypeId": 2,
+      "DetectionSource": "entra",
+      "Status": "ACTIVE",
+      "Pattern": "Connexion\\s+et\\s+activité\\s+dans\\s+deux\\s+pays"
+    },
+    {
+      "LabelId": "IDENT_IMPOSSIBLE_CONNECTION",
+      "TypeId": 3,
+      "DetectionSource": "entra",
+      "Status": "WATCH",
+      "Pattern": "Connexion\\s+impossible"
+    },
+    {
+      "LabelId": "IDENT_UNUSUAL_COUNTRY",
+      "TypeId": 1,
+      "DetectionSource": "entra",
+      "Status": "ACTIVE",
+      "Pattern": "Connexion(?:\\s+à)?\\s+(?:Office\\s*365\\s+)?depuis\\s+(?:un\\s+pays\\s+inhabituel|l['’]étranger|la\\s+(?<country>[A-ZÀ-Ý][\\wà-ÿ]+))"
+    },
+    {
+      "LabelId": "IDENT_PRIV_ROLE_ADD",
+      "TypeId": 4,
+      "DetectionSource": "entra",
+      "Status": "ACTIVE",
+      "Pattern": "Ajout\\s+de\\s+droit\\s+privilégié(?:\\s+par\\s+l['’]utilisateur\\s+(?<actor>[^\\s]+))?"
+    },
+    {
+      "LabelId": "IDENT_ACCOUNT_ADD",
+      "TypeId": 7,
+      "DetectionSource": "entra",
+      "Status": "REDUCED",
+      "Pattern": "Ajout\\s+de\\s+comptes?\\s+utilisateurs?"
+    },
+    {
+      "LabelId": "MAIL_FORWARD_RULE",
+      "TypeId": 5,
+      "DetectionSource": "entra",
+      "Status": "ACTIVE",
+      "Pattern": "(?:(?<action>Création|Mise\\s+à\\s+jour)\\s+d['’]une\\s+règle\\s+de\\s+redirection|Alerte\\s+de\\s+redirection\\s+de\\s+boîte\\s+mail)"
+    },
+    {
+      "LabelId": "MAIL_ACCESS_DELEGATION",
+      "TypeId": 7,
+      "DetectionSource": "entra",
+      "Status": "REDUCED",
+      "Pattern": "(?:Accès\\s+donné\\s+à\\s+une\\s+boîte\\s+mail|Ajout\\s+de\\s+permissions?\\s+sur\\s+une\\s+boîte\\s+mail)"
+    },
+    {
+      "LabelId": "MAIL_PHISHING_DELIVERED",
+      "TypeId": 18,
+      "DetectionSource": "mdo",
+      "Status": "ACTIVE",
+      "Pattern": "(?:Alerte\\s+)?mails?\\s+de\\s+phishing\\s+non\\s+bloqués?"
+    },
+    {
+      "LabelId": "APP_ACTIVITY",
+      "TypeId": 19,
+      "DetectionSource": "entra",
+      "Status": "REDUCED",
+      "Pattern": "Application\\s+activity"
+    },
+    {
+      "LabelId": "EDR_C2",
+      "TypeId": 10,
+      "DetectionSource": "xdr",
+      "Status": "ACTIVE",
+      "Pattern": "Comportement\\s+de\\s+commande\\s+et\\s+contrôle\\s+(?<state>bloqué|détecté)"
+    },
+    {
+      "LabelId": "EDR_MALWARE",
+      "TypeId": 13,
+      "DetectionSource": "xdr",
+      "Status": "ACTIVE",
+      "Pattern": "(?:Alerte\\s+)?Malware\\s+(?<family>[\\w\\-]+)\\s+détecté"
+    },
+    {
+      "LabelId": "EDR_PORT_SCAN",
+      "TypeId": 12,
+      "DetectionSource": "xdr",
+      "Status": "ACTIVE",
+      "Pattern": "(?:Alerte\\s+de\\s+)?scan\\s+de\\s+ports?\\s+(?<type>horizontal|vertical)"
+    },
+    {
+      "LabelId": "LH_MALWARE_ACTIVE_BLOCKED",
+      "TypeId": 13,
+      "DetectionSource": "xdr",
+      "Status": "ACTIVE",
+      "Pattern": "^An\\s+active\\s+'(?<family>[^']+)'\\s+malware\\s+was\\s+blocked$"
+    },
+    {
+      "LabelId": "LH_MALWARE_PREVENTED",
+      "TypeId": 13,
+      "DetectionSource": "xdr",
+      "Status": "ACTIVE",
+      "Pattern": "^'(?<family>[^']+)'\\s+malware\\s+was\\s+prevented$"
+    },
+    {
+      "LabelId": "LH_PUA_PREVENTED",
+      "TypeId": 14,
+      "DetectionSource": "xdr",
+      "Status": "ACTIVE",
+      "Pattern": "^'(?<family>[^']+)'\\s+unwanted\\s+software\\s+was\\s+prevented$"
+    },
+    {
+      "LabelId": "LH_INFOSTEALER",
+      "TypeId": 15,
+      "DetectionSource": "xdr",
+      "Status": "ACTIVE",
+      "Pattern": "^Information\\s+stealing\\s+malware\\s+activity$"
+    },
+    {
+      "LabelId": "LH_SUSPICIOUS_FILE",
+      "TypeId": 16,
+      "DetectionSource": "xdr",
+      "Status": "ACTIVE",
+      "Pattern": "^A\\s+suspicious\\s+file\\s+was\\s+observed$"
+    },
+    {
+      "LabelId": "LH_SUSPICIOUS_SERVICE",
+      "TypeId": 17,
+      "DetectionSource": "xdr",
+      "Status": "ACTIVE",
+      "Pattern": "^Suspicious\\s+service\\s+launched$"
+    },
+    {
+      "LabelId": "EDR_BINARY_ACTIVITY",
+      "TypeId": 11,
+      "DetectionSource": "unknown",
+      "Status": "ACTIVE",
+      "Pattern": "Activité(?:\\s+liée\\s+à)?\\s+(?<binary>[\\w\\.\\-]+)"
+    }
+  ],
+  "outOfScope": [
+    {
+      "LabelId": "DATA_MASS_DOWNLOAD",
+      "Reason": "Google Workspace: this portal covers Microsoft tenants only.",
+      "Pattern": "Téléchargement\\s+massif\\s+de\\s+fichiers(?:\\s+(?<platform>Google\\s+Workspace|SharePoint|OneDrive))?"
+    },
+    {
+      "LabelId": "S1_ACTIVE_THREAT",
+      "Reason": "Third-party endpoint product, deliberately out of scope for this portal.",
+      "Pattern": "New\\s+active\\s+threat\\s*-\\s*machine\\s+(?<hostname>[\\w\\-\\.]+)"
+    }
+  ],
+  "subject": {
+    "comment": [
+      "A subject arrives as \"[SOC x <scope>] - <label> - <target>\", sometimes behind reply prefixes",
+      "added by whoever forwarded it. Parsing it in one place means the caller sends the raw subject",
+      "and never has to reproduce this.",
+      "The label/target separator is \" - \" with spaces, never a bare hyphen: hostnames and mail",
+      "addresses contain hyphens."
+    ],
+    "StripPrefixPattern": "^(?:\\s*(?:RE|R[ée]p|TR|FW|Fwd|Fw|Re)\\s*:\\s*|\\s*\\[EXT\\]\\s*)+",
+    "MasterPattern": "^\\[\\s*SOC\\s*x\\s*(?<scope>[^\\]]+?)\\s*\\]\\s*-?\\s*(?<label>.+?)(?:\\s+-\\s+(?:(?:Compte|Poste)\\s+)?(?<target>\\S+))?\\s*-?\\s*$",
+    "TargetFallbackPattern": "(?<target>[^\\s]+@[^\\s]+)\\s*$"
+  }
+}
