@@ -10,6 +10,7 @@ BeforeAll {
     $RepoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSCommandPath))
     . (Join-Path $RepoRoot 'Modules/CIPPCore/Public/PSIT/Resolve-PSITSocTenant.ps1')
     . (Join-Path $RepoRoot 'Modules/CIPPCore/Public/PSIT/Get-PSITSocWebhookSecret.ps1')
+    . (Join-Path $RepoRoot 'Modules/CIPPCore/Public/PSIT/Set-PSITSocWebhookSecret.ps1')
 
     function Get-CippTable { param($tablename) @{ Table = $tablename } }
     function Get-CIPPAzDataTableEntity { param($Table, $Filter) }
