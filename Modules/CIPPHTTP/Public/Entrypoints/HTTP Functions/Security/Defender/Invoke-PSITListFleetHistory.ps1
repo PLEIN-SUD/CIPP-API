@@ -8,9 +8,9 @@ Function Invoke-PSITListFleetHistory {
         The recorded daily fleet health figures: one row per tenant per day, written by the
         Start-PSITFleetHealthSnapshot timer.
 
-        The Lighthouse aggregate only answers for the present, so without this a protection
-        switched off three weeks ago and a fleet that went silent yesterday look the same. Reading
-        the history is what separates them.
+        The live read only answers for the present, so without this a protection switched off
+        three weeks ago and a fleet that went silent yesterday look the same. Reading the history
+        is what separates them.
 
         Days with no row are days the snapshot did not run, and are absent rather than zero: a
         zero would read as "nothing wrong that day".
@@ -45,7 +45,7 @@ Function Invoke-PSITListFleetHistory {
                 DevicesReported     = [int]$Row.DevicesReported
                 NeedsAttention      = [int]$Row.NeedsAttention
                 ProtectionInDefault = [int]$Row.ProtectionInDefault
-                ActiveThreats       = [int]$Row.ActiveThreats
+                SignatureOverdue    = [int]$Row.SignatureOverdue
             }
         }
         $Results = @($Results | Sort-Object -Property Date)
@@ -59,7 +59,7 @@ Function Invoke-PSITListFleetHistory {
                     DevicesReported     = ($_.Group | Measure-Object -Property DevicesReported -Sum).Sum
                     NeedsAttention      = ($_.Group | Measure-Object -Property NeedsAttention -Sum).Sum
                     ProtectionInDefault = ($_.Group | Measure-Object -Property ProtectionInDefault -Sum).Sum
-                    ActiveThreats       = ($_.Group | Measure-Object -Property ActiveThreats -Sum).Sum
+                    SignatureOverdue    = ($_.Group | Measure-Object -Property SignatureOverdue -Sum).Sum
                 }
             } | Sort-Object -Property Date
         )

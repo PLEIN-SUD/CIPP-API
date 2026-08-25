@@ -1,9 +1,12 @@
-# Pester tests for the fleet health aggregation and its daily snapshot.
+# Pester tests for the fleet health read and its daily snapshot.
 #
-# Two things are worth pinning here. What counts as "protection in default" is a judgement the
-# view, the history and any future alert all read from one place, so it is tested rather than
-# trusted. And the snapshot keys on tenant and date: a timer that fires twice, or a node that
-# retries, must not turn one bad day into two.
+# The source changed after production proved the Lighthouse managed-tenant aggregates are refused
+# on this tenancy: the data now comes from Intune's managed devices, one tenant at a time. What is
+# pinned here is what survived that change. "Protection in default" is a judgement the view, the
+# history and any future alert read from one place, so it is tested rather than trusted. Machines
+# Intune knows but that report no protection state are counted rather than dropped, because an
+# absence must never render as a healthy row. And the snapshot keys on tenant and date: a timer
+# that fires twice, or a node that retries, must not turn one bad day into two.
 
 BeforeAll {
     $RepoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSCommandPath))
@@ -17,164 +20,193 @@ BeforeAll {
     function Get-Tenants { param([switch]$IncludeErrors) }
     function New-GraphGetRequest { param($uri, $tenantid) }
 
-    $script:Tenants = @(
-        [pscustomobject]@{ customerId = 'cust-1'; defaultDomainName = 'contoso.test' }
-        [pscustomobject]@{ customerId = 'cust-2'; defaultDomainName = 'fabrikam.test' }
-    )
+    $script:Device = {
+        param($Name, $Protection)
+        [pscustomobject]@{
+            id                     = "id-$Name"
+            deviceName             = $Name
+            operatingSystem        = 'Windows'
+            osVersion              = '10.0.22631.4460'
+            lastSyncDateTime       = '2026-08-25T05:00:00Z'
+            windowsProtectionState = $Protection
+        }
+    }
 
-    $script:Protection = @(
+    $script:Devices = @(
         # Healthy.
-        [pscustomobject]@{ tenantId = 'cust-1'; managedDeviceName = 'PC-001'; realTimeProtectionEnabled = $true; malwareProtectionEnabled = $true; attentionRequired = $false }
+        & $script:Device 'PC-001' ([pscustomobject]@{ realTimeProtectionEnabled = $true; malwareProtectionEnabled = $true; attentionRequired = $false; signatureUpdateOverdue = $false })
         # Real-time protection off.
-        [pscustomobject]@{ tenantId = 'cust-1'; managedDeviceName = 'PC-002'; realTimeProtectionEnabled = $false; malwareProtectionEnabled = $true; attentionRequired = $false }
-        # Protected, but carrying a threat.
-        [pscustomobject]@{ tenantId = 'cust-2'; managedDeviceName = 'PC-101'; realTimeProtectionEnabled = $true; malwareProtectionEnabled = $true; attentionRequired = $false }
-        # Protected, asking for attention.
-        [pscustomobject]@{ tenantId = 'cust-2'; managedDeviceName = 'PC-102'; realTimeProtectionEnabled = $true; malwareProtectionEnabled = $true; attentionRequired = $true }
-    )
-
-    $script:Malware = @(
-        [pscustomobject]@{ tenantId = 'cust-2'; managedDeviceName = 'PC-101'; malwareDisplayName = 'Wacatac'; malwareThreatState = 'Active' }
-        # Remediated: not a reason to flag a machine today.
-        [pscustomobject]@{ tenantId = 'cust-1'; managedDeviceName = 'PC-001'; malwareDisplayName = 'EICAR'; malwareThreatState = 'Remediated' }
+        & $script:Device 'PC-002' ([pscustomobject]@{ realTimeProtectionEnabled = $false; malwareProtectionEnabled = $true; attentionRequired = $false; signatureUpdateOverdue = $false })
+        # Protected, signatures behind.
+        & $script:Device 'PC-003' ([pscustomobject]@{ realTimeProtectionEnabled = $true; malwareProtectionEnabled = $true; attentionRequired = $false; signatureUpdateOverdue = $true })
+        # Protected and up to date, but asking for attention.
+        & $script:Device 'PC-004' ([pscustomobject]@{ realTimeProtectionEnabled = $true; malwareProtectionEnabled = $true; attentionRequired = $true; signatureUpdateOverdue = $false })
+        # Known to Intune, reports no protection state at all.
+        & $script:Device 'MAC-001' $null
     )
 }
 
 Describe 'Get-PSITFleetHealth' {
     It 'flags a machine whose protection is off, and leaves a healthy one alone' {
-        $Health = Get-PSITFleetHealth -Protection $script:Protection -Malware $script:Malware -Tenants $script:Tenants
+        $Result = Get-PSITFleetHealth -TenantFilter 'contoso.test' -Devices $script:Devices
 
-        $Healthy = $Health.Results | Where-Object { $_.DeviceName -eq 'PC-001' }
-        $Healthy.ProtectionInDefault | Should -BeFalse
-        $Healthy.NeedsAttention | Should -BeFalse
-
-        $Off = $Health.Results | Where-Object { $_.DeviceName -eq 'PC-002' }
+        $Off = $Result.Results | Where-Object { $_.DeviceName -eq 'PC-002' }
         $Off.ProtectionInDefault | Should -BeTrue
         $Off.NeedsAttention | Should -BeTrue
+
+        $Healthy = $Result.Results | Where-Object { $_.DeviceName -eq 'PC-001' }
+        $Healthy.ProtectionInDefault | Should -BeFalse
+        $Healthy.NeedsAttention | Should -BeFalse
     }
 
-    It 'carries the active threat on the machine running it, and ignores a remediated one' {
-        $Health = Get-PSITFleetHealth -Protection $script:Protection -Malware $script:Malware -Tenants $script:Tenants
+    It 'treats signatures behind as worth looking at, without calling the protection broken' {
+        $Result = Get-PSITFleetHealth -TenantFilter 'contoso.test' -Devices $script:Devices
 
-        $Threatened = $Health.Results | Where-Object { $_.DeviceName -eq 'PC-101' }
-        $Threatened.ActiveThreatCount | Should -Be 1
-        $Threatened.ActiveThreats | Should -Contain 'Wacatac'
-        # Protection is on: the threat alone is what makes it worth looking at.
-        $Threatened.ProtectionInDefault | Should -BeFalse
-        $Threatened.NeedsAttention | Should -BeTrue
-
-        # A remediated detection is history, not a reason to flag the machine today.
-        ($Health.Results | Where-Object { $_.DeviceName -eq 'PC-001' }).ActiveThreatCount | Should -Be 0
+        $Overdue = $Result.Results | Where-Object { $_.DeviceName -eq 'PC-003' }
+        $Overdue.SignatureUpdateOverdue | Should -BeTrue
+        $Overdue.NeedsAttention | Should -BeTrue
+        # Two distinct problems, two distinct counters: an out-of-date signature is not a
+        # disabled antivirus, and merging them would overstate the second.
+        $Overdue.ProtectionInDefault | Should -BeFalse
     }
 
     It 'treats attentionRequired as worth looking at even when protection is on' {
-        $Health = Get-PSITFleetHealth -Protection $script:Protection -Malware $script:Malware -Tenants $script:Tenants
-        ($Health.Results | Where-Object { $_.DeviceName -eq 'PC-102' }).NeedsAttention | Should -BeTrue
+        $Result = Get-PSITFleetHealth -TenantFilter 'contoso.test' -Devices $script:Devices
+
+        $Attention = $Result.Results | Where-Object { $_.DeviceName -eq 'PC-004' }
+        $Attention.NeedsAttention | Should -BeTrue
+        $Attention.ProtectionInDefault | Should -BeFalse
     }
 
-    It 'resolves the tenant name, and falls back to the id rather than showing nothing' {
-        $Health = Get-PSITFleetHealth -Protection $script:Protection -Malware $script:Malware -Tenants $script:Tenants
-        ($Health.Results | Where-Object { $_.DeviceName -eq 'PC-001' }).Tenant | Should -Be 'contoso.test'
+    It 'counts machines with no protection state instead of passing them off as healthy' {
+        # A Mac, or a Windows machine that has never reported: excluded from the protection
+        # figures, but reported as excluded. Silently dropping it would shrink the denominator
+        # and make the fleet look better than it is.
+        $Result = Get-PSITFleetHealth -TenantFilter 'contoso.test' -Devices $script:Devices
 
-        $Unknown = Get-PSITFleetHealth -Protection @(
-            [pscustomobject]@{ tenantId = 'cust-unknown'; managedDeviceName = 'PC-X'; realTimeProtectionEnabled = $true; malwareProtectionEnabled = $true }
-        ) -Malware @() -Tenants $script:Tenants
-        $Unknown.Results[0].Tenant | Should -Be 'cust-unknown'
+        @($Result.Results | Where-Object { $_.DeviceName -eq 'MAC-001' }).Count | Should -Be 0
+        $Result.Tenant.WithoutProtectionState | Should -Be 1
+        $Result.Tenant.DevicesReported | Should -Be 4
     }
 
-    It 'counts machines reported per tenant, which is what makes a silent fleet visible' {
-        $Health = Get-PSITFleetHealth -Protection $script:Protection -Malware $script:Malware -Tenants $script:Tenants
+    It 'counts the tenant figures the snapshot and the view both read' {
+        $Result = Get-PSITFleetHealth -TenantFilter 'contoso.test' -Devices $script:Devices
 
-        $Contoso = $Health.Tenants | Where-Object { $_.Tenant -eq 'contoso.test' }
-        $Contoso.DevicesReported | Should -Be 2
-        $Contoso.NeedsAttention | Should -Be 1
-        $Contoso.ProtectionInDefault | Should -Be 1
-        $Contoso.ActiveThreats | Should -Be 0
+        $Result.Tenant.Tenant | Should -Be 'contoso.test'
+        $Result.Tenant.NeedsAttention | Should -Be 3
+        $Result.Tenant.ProtectionInDefault | Should -Be 1
+        $Result.Tenant.SignatureOverdue | Should -Be 1
+    }
 
-        $Fabrikam = $Health.Tenants | Where-Object { $_.Tenant -eq 'fabrikam.test' }
-        $Fabrikam.DevicesReported | Should -Be 2
-        $Fabrikam.NeedsAttention | Should -Be 2
-        $Fabrikam.ActiveThreats | Should -Be 1
+    It 'refuses AllTenants rather than quietly reading one tenant' {
+        # The fleet-wide view is assembled from snapshots. A whole-fleet read reaching this
+        # function means a caller got the routing wrong, and answering for one tenant would look
+        # like an answer for forty.
+        { Get-PSITFleetHealth -TenantFilter 'AllTenants' } | Should -Throw -ExpectedMessage '*one tenant at a time*'
+    }
+
+    It 'names the tenant and repeats what Graph said when the read fails' {
+        Mock -CommandName New-GraphGetRequest -MockWith { throw 'Forbidden. Access denied.' }
+
+        { Get-PSITFleetHealth -TenantFilter 'contoso.test' } |
+            Should -Throw -ExpectedMessage '*contoso.test*Forbidden. Access denied.*'
     }
 
     It 'answers with empty counts rather than throwing when nothing is reported' {
-        $Health = Get-PSITFleetHealth -Protection @() -Malware @() -Tenants $script:Tenants
-        $Health.Metadata.TotalDevices | Should -Be 0
-        @($Health.Tenants).Count | Should -Be 0
+        $Result = Get-PSITFleetHealth -TenantFilter 'contoso.test' -Devices @()
+
+        @($Result.Results).Count | Should -Be 0
+        $Result.Tenant.DevicesReported | Should -Be 0
+        $Result.Metadata.TotalDevices | Should -Be 0
     }
 }
 
 Describe 'Start-PSITFleetHealthSnapshot' {
     BeforeEach {
         $script:Written = [System.Collections.Generic.List[object]]::new()
-        Mock -CommandName Write-LogMessage -MockWith { }
         Mock -CommandName Add-CIPPAzDataTableEntity -MockWith { $script:Written.Add($Entity) }
-        Mock -CommandName Get-PSITFleetHealth -MockWith {
-            [pscustomobject]@{
-                Results  = @()
-                Tenants  = @(
-                    [pscustomobject]@{ Tenant = 'contoso.test'; DevicesReported = 12; NeedsAttention = 2; ProtectionInDefault = 1; ActiveThreats = 1 }
-                    [pscustomobject]@{ Tenant = 'fabrikam.test'; DevicesReported = 30; NeedsAttention = 0; ProtectionInDefault = 0; ActiveThreats = 0 }
-                )
-                Metadata = [pscustomobject]@{ TotalDevices = 42; NeedsAttention = 2 }
-            }
+        Mock -CommandName Get-Tenants -MockWith {
+            @(
+                [pscustomobject]@{ defaultDomainName = 'contoso.test' }
+                [pscustomobject]@{ defaultDomainName = 'fabrikam.test' }
+            )
         }
+        Mock -CommandName Get-PSITFleetHealth -MockWith {
+            Get-PSITFleetHealth -TenantFilter $TenantFilter -Devices $script:Devices
+        } -ParameterFilter { $null -eq $Devices }
     }
 
     It 'writes one row per tenant, keyed by day so a re-run replaces rather than doubles' {
         Start-PSITFleetHealthSnapshot -Confirm:$false
 
         $script:Written.Count | Should -Be 2
-        $Today = [datetime]::UtcNow.ToString('yyyy-MM-dd')
-        foreach ($Entity in $script:Written) {
-            $Entity.RowKey | Should -Be $Today
+        @($script:Written.PartitionKey | Sort-Object) | Should -Be @('contoso.test', 'fabrikam.test')
+        @($script:Written.RowKey | Select-Object -Unique).Count | Should -Be 1
+        $script:Written[0].RowKey | Should -Be ([datetime]::UtcNow.ToString('yyyy-MM-dd'))
+    }
+
+    It 'stores the machines worth looking at, which is what the fleet view reads' {
+        Start-PSITFleetHealthSnapshot -Confirm:$false
+
+        $Stored = @($script:Written[0].AttentionDevices | ConvertFrom-Json)
+        @($Stored.DeviceName | Sort-Object) | Should -Be @('PC-002', 'PC-003', 'PC-004')
+        $script:Written[0].AttentionTruncated | Should -BeFalse
+        # The healthy machine is not stored: the row carries the counts for everyone and the
+        # detail only for what needs doing.
+        $Stored.DeviceName | Should -Not -Contain 'PC-001'
+    }
+
+    It 'flags a truncated list rather than presenting it as complete' {
+        $Many = 1..150 | ForEach-Object {
+            & $script:Device "PC-$_" ([pscustomobject]@{ realTimeProtectionEnabled = $false; malwareProtectionEnabled = $true; attentionRequired = $false; signatureUpdateOverdue = $false })
         }
-        ($script:Written | Where-Object { $_.PartitionKey -eq 'contoso.test' }).NeedsAttention | Should -Be 2
-        ($script:Written | Where-Object { $_.PartitionKey -eq 'fabrikam.test' }).DevicesReported | Should -Be 30
+        Mock -CommandName Get-PSITFleetHealth -MockWith {
+            Get-PSITFleetHealth -TenantFilter $TenantFilter -Devices $Many
+        } -ParameterFilter { $null -eq $Devices }
+
+        Start-PSITFleetHealthSnapshot -Confirm:$false
+
+        @($script:Written[0].AttentionDevices | ConvertFrom-Json).Count | Should -Be 100
+        $script:Written[0].AttentionTruncated | Should -BeTrue
+        # The count is not truncated with the list: the row still says 150 need attention.
+        $script:Written[0].NeedsAttention | Should -Be 150
     }
 
     It 'records a healthy tenant too: a trend needs the good days to show a bad one' {
+        $Healthy = @(& $script:Device 'PC-001' ([pscustomobject]@{ realTimeProtectionEnabled = $true; malwareProtectionEnabled = $true; attentionRequired = $false; signatureUpdateOverdue = $false }))
+        Mock -CommandName Get-PSITFleetHealth -MockWith {
+            Get-PSITFleetHealth -TenantFilter $TenantFilter -Devices $Healthy
+        } -ParameterFilter { $null -eq $Devices }
+
         Start-PSITFleetHealthSnapshot -Confirm:$false
-        ($script:Written | Where-Object { $_.PartitionKey -eq 'fabrikam.test' }).NeedsAttention | Should -Be 0
+
+        $script:Written.Count | Should -Be 2
+        $script:Written[0].NeedsAttention | Should -Be 0
+        $script:Written[0].DevicesReported | Should -Be 1
     }
 
-    It 'writes nothing and does not throw when the read fails' {
-        Mock -CommandName Get-PSITFleetHealth -MockWith { throw 'Forbidden' }
-        { Start-PSITFleetHealthSnapshot -Confirm:$false } | Should -Not -Throw
-        $script:Written.Count | Should -Be 0
-    }
+    It 'keeps recording the other tenants when one fails to read' {
+        # One client refusing the read must not cost the other thirty-nine their history.
+        Mock -CommandName Get-PSITFleetHealth -MockWith {
+            if ($TenantFilter -eq 'contoso.test') { throw 'Forbidden. Access denied.' }
+            Get-PSITFleetHealth -TenantFilter $TenantFilter -Devices $script:Devices
+        } -ParameterFilter { $null -eq $Devices }
 
-    It 'keeps recording the other tenants when one row cannot be written' {
-        # One client failing must not cost the others their history for the day.
-        Mock -CommandName Add-CIPPAzDataTableEntity -MockWith {
-            if ($Entity.PartitionKey -eq 'contoso.test') { throw 'Table unavailable' }
-            $script:Written.Add($Entity)
-        }
-        { Start-PSITFleetHealthSnapshot -Confirm:$false } | Should -Not -Throw
+        Start-PSITFleetHealthSnapshot -Confirm:$false
+
         $script:Written.Count | Should -Be 1
         $script:Written[0].PartitionKey | Should -Be 'fabrikam.test'
     }
-}
 
-Describe 'Get-PSITFleetHealth reading Graph' {
-    # The dashboard came back in production saying "Required license not available for this
-    # tenant" and nothing else. That sentence is CIPP's normalisation of several distinct Graph
-    # answers, and it named neither of the two aggregates, so it could not be acted on. What is
-    # pinned here is that a failure says which call failed and repeats what Graph replied.
+    It 'keeps recording the other tenants when one row cannot be written' {
+        Mock -CommandName Add-CIPPAzDataTableEntity -MockWith {
+            if ($Entity.PartitionKey -eq 'contoso.test') { throw 'Table storage unavailable' }
+            $script:Written.Add($Entity)
+        }
 
-    It 'names the aggregate that failed, and keeps what Graph answered' {
-        Mock -CommandName Get-Tenants -MockWith { $script:Tenants }
-        Mock -CommandName New-GraphGetRequest -MockWith { throw 'Request not applicable to target tenant.' }
+        Start-PSITFleetHealthSnapshot -Confirm:$false
 
-        { Get-PSITFleetHealth -TenantFilter 'AllTenants' } |
-            Should -Throw -ExpectedMessage '*windowsProtectionStates*Request not applicable to target tenant.*'
-    }
-
-    It 'names the aggregate on a single tenant too, not only on a whole-fleet read' {
-        Mock -CommandName Get-Tenants -MockWith { $script:Tenants }
-        Mock -CommandName New-GraphGetRequest -MockWith { throw 'Your tenant is not licensed for this feature.' }
-
-        { Get-PSITFleetHealth -TenantFilter 'contoso.test' } |
-            Should -Throw -ExpectedMessage '*windowsProtectionStates*not licensed*'
+        $script:Written.Count | Should -Be 1
+        $script:Written[0].PartitionKey | Should -Be 'fabrikam.test'
     }
 }

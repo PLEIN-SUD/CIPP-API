@@ -5,47 +5,112 @@ Function Invoke-PSITListFleetHealth {
     .ROLE
         Endpoint.MEM.Read
     .DESCRIPTION
-        Defender health across every managed tenant, in one view: which machines have their
-        protection off or behind, and which are carrying an active malware threat.
+        Defender protection state across the managed fleet: which machines have their protection
+        off or their signatures behind, and which clients are affected.
 
-        The data comes from the Lighthouse managed-tenant aggregates
-        (windowsProtectionStates and windowsDeviceMalwareStates), which CIPP already reads inside
-        its Defender alerts: one Graph call covers every tenant, with no per-tenant fan-out.
+        One tenant is read live, one Graph call, in that tenant's own context. The whole fleet is
+        read from the daily snapshots instead, because forty live calls behind a page load is not
+        a page load. The response says which of the two it is and how old it is, since a snapshot
+        presented as the present is a wrong answer rather than a slow one.
 
-        Rows are narrowed to the tenants the caller may see: the Lighthouse aggregate returns
-        every managed tenant with no per-caller scoping, exactly as ListAllTenantDeviceCompliance
-        documents.
-
-        A machine appears here only if Lighthouse knows it, which means it is onboarded and
-        reporting. A silent machine is therefore an absence, not a green row: the response says
-        how many machines each tenant reported so a fleet that stopped reporting is visible as a
-        drop rather than as good news.
+        A machine appears here only if Intune reported it. The response therefore carries how many
+        machines each tenant reported, so a fleet that stopped reporting shows up as a drop rather
+        than as an absence of red rows.
     #>
     [CmdletBinding()]
     param($Request, $TriggerMetadata)
 
-    $TenantFilter = $Request.Query.tenantFilter
+    $TenantFilter = Get-PSITSocRequestValue -Value $Request.Query.tenantFilter
     $Headers = $Request.Headers
 
     try {
-        # The aggregation lives in Get-PSITFleetHealth so the view and the daily snapshot read the
-        # same definition of "protection in default"; rows are then narrowed to the tenants this
-        # caller may see, since the Lighthouse aggregate returns every managed tenant.
-        $Health = Get-PSITFleetHealth -TenantFilter $TenantFilter
-        $Results = @($Health.Results | Select-CippAllowedTenantData -TenantProperty 'TenantId')
-        $Allowed = @($Results | ForEach-Object { $_.Tenant } | Select-Object -Unique)
-        $Reported = @($Health.Tenants | Where-Object { $Allowed -contains $_.Tenant })
+        if ($TenantFilter -and $TenantFilter -ne 'AllTenants') {
+            $Health = Get-PSITFleetHealth -TenantFilter $TenantFilter
+            $Results = @($Health.Results | Select-CippAllowedTenantData -TenantProperty 'Tenant')
+            $Tenants = @($Health.Tenant | Where-Object { $_.Tenant -in @($Results.Tenant) })
+
+            return ([HttpResponseContext]@{
+                    StatusCode = [HttpStatusCode]::OK
+                    Body       = @{
+                        Results  = $Results
+                        Tenants  = $Tenants
+                        Metadata = @{
+                            TotalDevices           = $Results.Count
+                            NeedsAttention         = @($Results | Where-Object { $_.NeedsAttention }).Count
+                            ProtectionInDefault    = @($Results | Where-Object { $_.ProtectionInDefault }).Count
+                            SignatureOverdue       = @($Results | Where-Object { $_.SignatureUpdateOverdue }).Count
+                            WithoutProtectionState = $Health.Metadata.WithoutProtectionState
+                            Source                 = $Health.Metadata.Source
+                            Live                   = $true
+                            AsOf                   = [datetime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ')
+                        }
+                    }
+                })
+        }
+
+        # Whole fleet: the most recent snapshot per tenant. Bounded to the last week so the scan
+        # stays small; a tenant whose last snapshot is older than that has stopped being recorded
+        # and its absence is the finding.
+        $Table = Get-CIPPTable -tablename 'PSITFleetHealthHistory'
+        $Since = [datetime]::UtcNow.AddDays(-7).ToString('yyyy-MM-dd')
+        $Rows = @(Get-CIPPAzDataTableEntity @Table | Where-Object { [string]$_.RowKey -ge $Since })
+        $Rows = @($Rows | Select-CippAllowedTenantData -TenantProperty 'PartitionKey')
+
+        $Latest = @(
+            $Rows | Group-Object -Property PartitionKey | ForEach-Object {
+                $_.Group | Sort-Object -Property RowKey -Descending | Select-Object -First 1
+            }
+        )
+
+        $Results = foreach ($Row in $Latest) {
+            if ([string]::IsNullOrWhiteSpace([string]$Row.AttentionDevices)) { continue }
+            try {
+                $Devices = @([string]$Row.AttentionDevices | ConvertFrom-Json)
+            } catch {
+                # A row whose payload cannot be read is skipped, not treated as a tenant with
+                # nothing wrong: the counts below still come from the row's own figures.
+                Write-Information "PSITListFleetHealth: unreadable AttentionDevices for $($Row.PartitionKey) on $($Row.RowKey)"
+                continue
+            }
+            foreach ($Device in $Devices) {
+                $Device | Add-Member -NotePropertyName 'SnapshotDate' -NotePropertyValue ([string]$Row.RowKey) -Force
+                $Device
+            }
+        }
+        $Results = @($Results)
+
+        $Tenants = @(
+            $Latest | ForEach-Object {
+                [PSCustomObject]@{
+                    Tenant                 = [string]$_.PartitionKey
+                    DevicesReported        = [int]$_.DevicesReported
+                    NeedsAttention         = [int]$_.NeedsAttention
+                    ProtectionInDefault    = [int]$_.ProtectionInDefault
+                    SignatureOverdue       = [int]$_.SignatureOverdue
+                    WithoutProtectionState = [int]$_.WithoutProtectionState
+                    SnapshotDate           = [string]$_.RowKey
+                    AttentionTruncated     = [bool]$_.AttentionTruncated
+                }
+            }
+        )
+
+        $AsOf = if ($Tenants.Count -gt 0) { @($Tenants.SnapshotDate | Sort-Object -Descending)[0] } else { '' }
 
         return ([HttpResponseContext]@{
                 StatusCode = [HttpStatusCode]::OK
                 Body       = @{
                     Results  = $Results
-                    Tenants  = $Reported
+                    Tenants  = $Tenants
                     Metadata = @{
-                        TotalDevices   = $Results.Count
-                        NeedsAttention = @($Results | Where-Object { $_.NeedsAttention }).Count
-                        ActiveThreats  = @($Results | Where-Object { $_.ActiveThreatCount -gt 0 }).Count
-                        Source         = $Health.Metadata.Source
+                        TotalDevices           = ($Tenants | Measure-Object -Property DevicesReported -Sum).Sum ?? 0
+                        NeedsAttention         = ($Tenants | Measure-Object -Property NeedsAttention -Sum).Sum ?? 0
+                        ProtectionInDefault    = ($Tenants | Measure-Object -Property ProtectionInDefault -Sum).Sum ?? 0
+                        SignatureOverdue       = ($Tenants | Measure-Object -Property SignatureOverdue -Sum).Sum ?? 0
+                        WithoutProtectionState = ($Tenants | Measure-Object -Property WithoutProtectionState -Sum).Sum ?? 0
+                        TenantsReporting       = $Tenants.Count
+                        Source                 = 'Daily snapshot of Intune managed devices'
+                        Live                   = $false
+                        AsOf                   = $AsOf
                     }
                 }
             })
@@ -57,8 +122,7 @@ Function Invoke-PSITListFleetHealth {
         #
         # The raw message is returned rather than the normalised one. Get-NormalizedError maps
         # several distinct Graph answers onto a single sentence, which is fine for an action a
-        # user retries and useless for a read that has to be diagnosed: 'Required license not
-        # available for this tenant' hides both which aggregate failed and what Graph replied.
+        # user retries and useless for a read that has to be diagnosed.
         return ([HttpResponseContext]@{
                 StatusCode = [HttpStatusCode]::InternalServerError
                 Body       = @{ Results = "Could not read fleet health: $($ErrorMessage.Message)" }
