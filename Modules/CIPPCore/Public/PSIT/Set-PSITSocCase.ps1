@@ -41,10 +41,22 @@ function Set-PSITSocCase {
 
         [string]$Title,
 
+        # How the case reached us, not what detected the event. The external SOC transports
+        # Defender, Defender for Office and Entra detections alike, so the two are separate
+        # fields: filing an endpoint detection under the channel it arrived through attributes a
+        # false source, and double counts the event when it also arrives from the portal.
         [ValidateSet('extsoc', 'xdr', 'mdo', 'manual')]
         [string]$Source,
 
-        [ValidateRange(1, 18)]
+        # The product that detected the event, when it is known.
+        [ValidateSet('xdr', 'mdo', 'entra', 'gws', 's1', 'unknown')]
+        [string]$DetectionSource,
+
+        # Deliberately permissive rather than an exact list: the catalogue of types lives in the
+        # frontend, next to the guides, and a new type should not need an API release to land. An
+        # id with no catalogue entry renders as unknown, which is visible; refusing it here would
+        # only move the problem to a moment when nobody can act on it.
+        [ValidateRange(1, 99)]
         [int]$TypeId,
 
         [ValidateSet('P1', 'P2', 'P3', 'P4')]
@@ -247,7 +259,8 @@ function Set-PSITSocCase {
         PartitionKey  = $TenantFilter
         RowKey        = $CaseId
         Title         = & $Keep $Title $Existing.Title
-        Source        = & $Keep $Source $Existing.Source
+        Source          = & $Keep $Source $Existing.Source
+        DetectionSource = & $Keep $DetectionSource $Existing.DetectionSource
         TypeId        = if ($PSBoundParameters.ContainsKey('TypeId')) { [string]$TypeId } else { [string]$Existing.TypeId }
         Severity      = & $Keep $Severity $Existing.Severity
         Status        = [string]$NewStatus

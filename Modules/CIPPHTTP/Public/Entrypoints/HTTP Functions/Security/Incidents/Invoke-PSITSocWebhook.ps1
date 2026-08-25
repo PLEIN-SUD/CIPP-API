@@ -29,9 +29,17 @@ Function Invoke-PSITSocWebhook {
         ticket. The refusal is logged with the name, so a genuine typo on a managed client is
         visible rather than lost.
 
-        Body: Source, TypeId, Title, and optionally Severity, ExternalRef, TicketRef, TenantFilter
-        or TenantName, and Entities. Adoption stays idempotent through Set-PSITSocCase, so the
-        automation retrying costs nothing.
+        Post the raw Subject and the rest follows: the alert type, the client scope and the
+        affected entity are read from it here, so the automation never has to reproduce a mapping
+        table nor keep it in step with this one. An explicit TypeId, TenantName or Title still
+        wins over what the subject says, for a caller that already knows better.
+
+        An alert this portal cannot investigate opens no case, for the same reason an unknown
+        client does not: a row nobody can act on teaches an analyst to skip rows.
+
+        Body: Subject, or Source, TypeId and Title supplied directly. Optionally Severity,
+        ExternalRef, TicketRef, TenantFilter or TenantName, and Entities. Adoption stays
+        idempotent through Set-PSITSocCase, so the automation retrying costs nothing.
     #>
     [CmdletBinding()]
     param($Request, $TriggerMetadata)
@@ -64,15 +72,32 @@ Function Invoke-PSITSocWebhook {
     }
 
     try {
-        $Tenants = Get-Tenants -IncludeErrors
-        $Resolution = if (-not [string]::IsNullOrWhiteSpace($Body.TenantFilter)) {
-            Resolve-PSITSocTenant -Name $Body.TenantFilter -Tenants $Tenants
-        } else {
-            Resolve-PSITSocTenant -Name $Body.TenantName -Tenants $Tenants
+        # Parsed first: the subject carries the client scope, which is what the tenant resolves
+        # from when the caller names none.
+        $Alert = Resolve-PSITSocAlertType -Subject ([string]$Body.Subject)
+
+        if ($Alert.OutOfScope) {
+            Write-LogMessage -API 'PSITSocWebhook' -tenant 'CIPP' -message "SOC webhook: '$($Alert.LabelId)' is out of scope for this portal, no case opened." -sev Info
+            return ([HttpResponseContext]@{
+                    StatusCode = [HttpStatusCode]::OK
+                    Body       = @{
+                        Results  = "$($Alert.Reason) No case was opened."
+                        Ingested = $false
+                        Reason   = 'out-of-scope'
+                        LabelId  = $Alert.LabelId
+                    }
+                })
         }
 
+        $TenantName = @($Body.TenantFilter, $Body.TenantName, $Alert.Scope) |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+            Select-Object -First 1
+
+        $Tenants = Get-Tenants -IncludeErrors
+        $Resolution = Resolve-PSITSocTenant -Name $TenantName -Tenants $Tenants
+
         if ($Resolution.Reason -eq 'unknown') {
-            $Supplied = [string]($Body.TenantName ?? $Body.TenantFilter)
+            $Supplied = [string]$TenantName
             Write-LogMessage -API 'PSITSocWebhook' -tenant 'CIPP' -message "SOC webhook: no managed tenant matches '$Supplied', no case opened." -sev Warn
             return ([HttpResponseContext]@{
                     StatusCode = [HttpStatusCode]::OK
@@ -89,15 +114,31 @@ Function Invoke-PSITSocWebhook {
             TenantFilter = $Resolution.Tenant
             Analyst      = 'webhook'
             Source       = if ([string]::IsNullOrWhiteSpace($Body.Source)) { 'extsoc' } else { [string]$Body.Source }
-            Title        = [string]$Body.Title
+            # The label read off the subject, when the caller sends no title of its own.
+            Title        = if ([string]::IsNullOrWhiteSpace($Body.Title)) { [string]$Alert.Label } else { [string]$Body.Title }
         }
         if ($null -ne $Body.TypeId -and "$($Body.TypeId)" -match '^\d+$') {
             $Parameters.TypeId = [int]$Body.TypeId
+        } elseif ($Alert.TypeId -gt 0) {
+            $Parameters.TypeId = [int]$Alert.TypeId
+        }
+        if (-not [string]::IsNullOrWhiteSpace($Alert.DetectionSource)) {
+            $Parameters.DetectionSource = [string]$Alert.DetectionSource
         }
         foreach ($Name in @('Severity', 'ExternalRef', 'TicketRef')) {
             if (-not [string]::IsNullOrWhiteSpace($Body.$Name)) { $Parameters.$Name = [string]$Body.$Name }
         }
-        if ($null -ne $Body.Entities) { $Parameters.Entities = $Body.Entities }
+        if ($null -ne $Body.Entities) {
+            $Parameters.Entities = $Body.Entities
+        } elseif (-not [string]::IsNullOrWhiteSpace($Alert.Target)) {
+            # The subject names one entity, and which kind depends on the alert: a mail address
+            # for the identity labels, a machine name for the endpoint ones.
+            $Parameters.Entities = if ($Alert.Target -like '*@*') {
+                @{ upn = [string]$Alert.Target }
+            } else {
+                @{ deviceName = [string]$Alert.Target }
+            }
+        }
 
         $Case = Set-PSITSocCase @Parameters
 
@@ -105,7 +146,7 @@ Function Invoke-PSITSocWebhook {
         # able to tell "the name matched nothing" from "two clients matched".
         $null = Set-PSITSocCase -TenantFilter $Case.Tenant -CaseId $Case.CaseId -Analyst 'webhook' -LogAction @{
             Action = 'ingested'
-            Detail = "Tenant resolution: $($Resolution.Method) from '$($Body.TenantName ?? $Body.TenantFilter)'"
+            Detail = "Tenant resolution: $($Resolution.Method) from '$TenantName'. Alert label: $($Alert.LabelId) ($($Alert.Status))."
         }
 
         return ([HttpResponseContext]@{
@@ -116,6 +157,8 @@ Function Invoke-PSITSocWebhook {
                     CaseId           = $Case.CaseId
                     Tenant           = $Case.Tenant
                     TenantResolution = $Resolution.Method
+                    LabelId          = $Alert.LabelId
+                    TypeId           = $Case.TypeId
                 }
             })
     } catch {
