@@ -155,3 +155,26 @@ Describe 'Start-PSITFleetHealthSnapshot' {
         $script:Written[0].PartitionKey | Should -Be 'fabrikam.test'
     }
 }
+
+Describe 'Get-PSITFleetHealth reading Graph' {
+    # The dashboard came back in production saying "Required license not available for this
+    # tenant" and nothing else. That sentence is CIPP's normalisation of several distinct Graph
+    # answers, and it named neither of the two aggregates, so it could not be acted on. What is
+    # pinned here is that a failure says which call failed and repeats what Graph replied.
+
+    It 'names the aggregate that failed, and keeps what Graph answered' {
+        Mock -CommandName Get-Tenants -MockWith { $script:Tenants }
+        Mock -CommandName New-GraphGetRequest -MockWith { throw 'Request not applicable to target tenant.' }
+
+        { Get-PSITFleetHealth -TenantFilter 'AllTenants' } |
+            Should -Throw -ExpectedMessage '*windowsProtectionStates*Request not applicable to target tenant.*'
+    }
+
+    It 'names the aggregate on a single tenant too, not only on a whole-fleet read' {
+        Mock -CommandName Get-Tenants -MockWith { $script:Tenants }
+        Mock -CommandName New-GraphGetRequest -MockWith { throw 'Your tenant is not licensed for this feature.' }
+
+        { Get-PSITFleetHealth -TenantFilter 'contoso.test' } |
+            Should -Throw -ExpectedMessage '*windowsProtectionStates*not licensed*'
+    }
+}

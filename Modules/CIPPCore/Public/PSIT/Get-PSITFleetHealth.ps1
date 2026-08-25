@@ -44,19 +44,34 @@ function Get-PSITFleetHealth {
     }
 
     if ($null -eq $Protection -or $null -eq $Malware) {
-        $ProtectionUri = 'https://graph.microsoft.com/beta/tenantRelationships/managedTenants/windowsProtectionStates?$top=999'
-        $MalwareUri = 'https://graph.microsoft.com/beta/tenantRelationships/managedTenants/windowsDeviceMalwareStates?$top=999'
+        $ProtectionBase = 'https://graph.microsoft.com/beta/tenantRelationships/managedTenants/windowsProtectionStates?$top=999'
+        $MalwareBase = 'https://graph.microsoft.com/beta/tenantRelationships/managedTenants/windowsDeviceMalwareStates?$top=999'
 
+        $CustomerId = $null
         if ($TenantFilter -and $TenantFilter -ne 'AllTenants') {
             $CustomerId = ($Tenants | Where-Object { $_.defaultDomainName -eq $TenantFilter } | Select-Object -First 1).customerId
-            if ($CustomerId) {
-                $ProtectionUri = "$ProtectionUri&`$filter=tenantId eq '$CustomerId'"
-                $MalwareUri = "$MalwareUri&`$filter=tenantId eq '$CustomerId'"
+        }
+
+        # Reads one aggregate, and says which one when it fails. CIPP normalises several unrelated
+        # Graph errors to the same sentence, so a caller that reports only the normalised text can
+        # say neither which of the two calls failed nor what Graph actually answered.
+        #
+        # No retry without the filter: production fails identically on AllTenants, which sends no
+        # filter at all, so a rejected filter is already ruled out and a second call would only
+        # add a second failure to the log.
+        $Fetch = {
+            param($Name, $BaseUri, $Filter)
+
+            $Uri = if ($Filter) { "$BaseUri&`$filter=tenantId eq '$Filter'" } else { $BaseUri }
+            try {
+                return @(New-GraphGetRequest -uri $Uri)
+            } catch {
+                throw "Lighthouse aggregate $Name failed. Graph said: $($_.Exception.Message)"
             }
         }
 
-        if ($null -eq $Protection) { $Protection = @(New-GraphGetRequest -uri $ProtectionUri) }
-        if ($null -eq $Malware) { $Malware = @(New-GraphGetRequest -uri $MalwareUri) }
+        if ($null -eq $Protection) { $Protection = & $Fetch 'windowsProtectionStates' $ProtectionBase $CustomerId }
+        if ($null -eq $Malware) { $Malware = & $Fetch 'windowsDeviceMalwareStates' $MalwareBase $CustomerId }
     }
 
     # Active threats indexed by device, so a machine row carries what is running on it.
