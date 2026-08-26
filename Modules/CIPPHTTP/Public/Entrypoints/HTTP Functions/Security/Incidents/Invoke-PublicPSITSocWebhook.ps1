@@ -1,4 +1,4 @@
-Function Invoke-PSITSocWebhook {
+Function Invoke-PublicPSITSocWebhook {
     <#
     .FUNCTIONALITY
         Entrypoint
@@ -8,6 +8,10 @@ Function Invoke-PSITSocWebhook {
         Ingestion endpoint for the SOC case queue: the automation that already turns an external
         SOC notification into a ticket posts the same facts here, and the case exists without
         anyone retyping it.
+
+        The Public name prefix is what exposes it: the static web app only routes /api/Public*
+        anonymously, and the function app behind it refuses everything else at the platform door
+        before any code runs. Renamed after a live call answered 401 from that door.
 
         Public means unauthenticated by CIPP's RBAC, so authorisation is a shared secret carried
         in the query string, compared against the one stored by ExecSocWebhookSecret. No secret

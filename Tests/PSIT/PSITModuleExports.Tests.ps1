@@ -16,7 +16,7 @@ BeforeAll {
     $script:HttpPath = Join-Path $script:RepoRoot 'Modules/CIPPHTTP/Public/Entrypoints/HTTP Functions'
 
     $script:Exported = @(Get-ChildItem -Path $script:CorePath -Filter '*.ps1' | ForEach-Object { $_.BaseName })
-    $script:Endpoints = @(Get-ChildItem -Path $script:HttpPath -Filter 'Invoke-PSIT*.ps1' -Recurse)
+    $script:Endpoints = @(Get-ChildItem -Path $script:HttpPath -Filter 'Invoke-*PSIT*.ps1' -Recurse)
 }
 
 Describe 'PSIT module exports' {
