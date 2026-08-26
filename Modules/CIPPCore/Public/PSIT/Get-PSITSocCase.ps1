@@ -99,6 +99,7 @@ function ConvertFrom-PSITSocCaseRow {
         TypeId        = if ($null -ne $Row.TypeId -and "$($Row.TypeId)" -match '^\d+$') { [int]$Row.TypeId } else { $null }
         Severity      = [string]$Row.Severity
         Status        = [string]$Row.Status
+        AssignedTo    = [string]$Row.AssignedTo
         Title         = [string]$Row.Title
         Entities      = & $ParseJson $Row.Entities ([pscustomobject]@{})
         ExternalRef   = [string]$Row.ExternalRef

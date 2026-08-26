@@ -65,6 +65,12 @@ function Set-PSITSocCase {
         [ValidateSet('new', 'investigating', 'qualified-fp', 'qualified-tp', 'contained', 'closed')]
         [string]$Status,
 
+        # Who is on it. Distinct from UpdatedBy, which is whoever last touched the record: a second
+        # analyst adding a note would otherwise appear to have taken the case from the first.
+        # An empty string releases the case, which is why this one is not skipped when blank.
+        [AllowEmptyString()]
+        [string]$AssignedTo,
+
         # Free-form object naming what the case is about: userId, upn, deviceId, deviceName,
         # appId, networkMessageId, ip. The case view decides which context panels to show from
         # the properties present.
@@ -259,6 +265,7 @@ function Set-PSITSocCase {
         PartitionKey  = $TenantFilter
         RowKey        = $CaseId
         Title         = & $Keep $Title $Existing.Title
+        AssignedTo      = if ($PSBoundParameters.ContainsKey('AssignedTo')) { [string]$AssignedTo } else { [string]$Existing.AssignedTo }
         Source          = & $Keep $Source $Existing.Source
         DetectionSource = & $Keep $DetectionSource $Existing.DetectionSource
         TypeId        = if ($PSBoundParameters.ContainsKey('TypeId')) { [string]$TypeId } else { [string]$Existing.TypeId }

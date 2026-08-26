@@ -231,3 +231,52 @@ Describe 'Get-PSITSocCase' {
         @(Get-PSITSocCase)[0].Tenant | Should -Be 'contoso.test'
     }
 }
+
+Describe 'Set-PSITSocCase assignment' {
+    # Who is on a case and who last touched it are different facts. Conflating them would show a
+    # case as taken by whoever added the most recent note, which is how two analysts end up each
+    # believing the other is handling it.
+
+    BeforeEach {
+        $script:Written = [System.Collections.Generic.List[object]]::new()
+        Mock -CommandName Add-CIPPAzDataTableEntity -MockWith { $script:Written.Add($Entity) }
+        Mock -CommandName Get-CIPPAzDataTableEntity -MockWith { $null }
+    }
+
+    It 'records who took the case' {
+        $null = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'first@example.test' -Source 'manual' -TypeId 2 -Title 'x' -AssignedTo 'first@example.test'
+        $script:Written[0].AssignedTo | Should -Be 'first@example.test'
+    }
+
+    It 'leaves the assignment alone when an update does not mention it' {
+        Mock -CommandName Get-CIPPAzDataTableEntity -MockWith {
+            [pscustomobject]@{
+                PartitionKey = 'contoso.test'; RowKey = 'PSIT-SOC-1'; CaseId = 'PSIT-SOC-1'
+                Tenant = 'contoso.test'; Source = 'manual'; TypeId = '2'; Title = 'x'
+                Severity = 'P3'; Status = 'investigating'; AssignedTo = 'first@example.test'
+                CreatedUtc = '2026-08-25T09:00:00Z'; CreatedBy = 'first@example.test'
+            }
+        }
+
+        # A second analyst adding a note must not appear to have taken the case.
+        $null = Set-PSITSocCase -TenantFilter 'contoso.test' -CaseId 'PSIT-SOC-1' -Analyst 'second@example.test' -LogAction @{ Action = 'note'; Detail = 'vu' }
+
+        $script:Written[0].AssignedTo | Should -Be 'first@example.test'
+        $script:Written[0].UpdatedBy | Should -Be 'second@example.test'
+    }
+
+    It 'releases the case on an empty assignment rather than ignoring it' {
+        Mock -CommandName Get-CIPPAzDataTableEntity -MockWith {
+            [pscustomobject]@{
+                PartitionKey = 'contoso.test'; RowKey = 'PSIT-SOC-1'; CaseId = 'PSIT-SOC-1'
+                Tenant = 'contoso.test'; Source = 'manual'; TypeId = '2'; Title = 'x'
+                Severity = 'P3'; Status = 'investigating'; AssignedTo = 'first@example.test'
+                CreatedUtc = '2026-08-25T09:00:00Z'; CreatedBy = 'first@example.test'
+            }
+        }
+
+        $null = Set-PSITSocCase -TenantFilter 'contoso.test' -CaseId 'PSIT-SOC-1' -Analyst 'first@example.test' -AssignedTo ''
+
+        $script:Written[0].AssignedTo | Should -BeNullOrEmpty
+    }
+}

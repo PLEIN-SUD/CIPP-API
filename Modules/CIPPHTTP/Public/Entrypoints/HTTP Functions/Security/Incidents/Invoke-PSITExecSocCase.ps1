@@ -44,6 +44,16 @@ Function Invoke-PSITExecSocCase {
         $Value = Get-PSITSocRequestValue -Value $Request.Body.$Name
         if (-not [string]::IsNullOrWhiteSpace($Value)) { $Parameters.$Name = [string]$Value }
     }
+    # Taking a case assigns it to the caller, never to a name the caller supplies: an analyst
+    # claiming work is not the same gesture as handing it to someone else, and only the second
+    # should be able to write another person's name onto a case.
+    if ($Request.Body.TakeOwnership -eq $true) {
+        $Parameters.AssignedTo = $Analyst
+    } elseif ($null -ne $Request.Body.AssignedTo) {
+        # Reassignment, including release: an empty string is a value here, not a missing one.
+        $Parameters.AssignedTo = [string](Get-PSITSocRequestValue -Value $Request.Body.AssignedTo)
+    }
+
     $TypeId = Get-PSITSocRequestValue -Value $Request.Body.TypeId
     if ($null -ne $TypeId -and "$TypeId" -match '^\d+$') {
         $Parameters.TypeId = [int]$TypeId
