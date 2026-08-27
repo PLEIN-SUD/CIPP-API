@@ -40,6 +40,10 @@ Function Invoke-PSITListFleetHealth {
                             ProtectionInDefault    = @($Results | Where-Object { $_.ProtectionInDefault }).Count
                             SignatureOverdue       = @($Results | Where-Object { $_.SignatureUpdateOverdue }).Count
                             WithoutProtectionState = $Health.Metadata.WithoutProtectionState
+                            MdeOnly                = $Health.Tenant.MdeOnly
+                            # A Defender side that could not be read is named to the caller: a fleet quietly
+                            # missing it hides exactly the machines this join exists for.
+                            Warnings               = @($Health.Metadata.Warnings)
                             Source                 = $Health.Metadata.Source
                             Live                   = $true
                             AsOf                   = [datetime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ')

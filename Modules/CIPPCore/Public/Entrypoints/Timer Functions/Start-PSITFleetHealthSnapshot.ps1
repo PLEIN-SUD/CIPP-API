@@ -64,7 +64,7 @@ function Start-PSITFleetHealthSnapshot {
             # that says nothing about being truncated is a list that reads as complete.
             $Truncated = $Attention.Count -gt 100
             $Stored = @($Attention | Select-Object -First 100 | Select-Object Tenant, DeviceName, OperatingSystem, OsVersion, LastSyncDateTime,
-                RealTimeProtectionEnabled, MalwareProtectionEnabled, SignatureUpdateOverdue, AttentionRequired, ProtectionInDefault, NeedsAttention,
+                RealTimeProtectionEnabled, MalwareProtectionEnabled, SignatureUpdateOverdue, AttentionRequired, ProtectionInDefault, ManagedBy, RiskScore, NeedsAttention,
                 ManagedDeviceHealthState)
 
             $Entity = @{

@@ -210,3 +210,55 @@ Describe 'Start-PSITFleetHealthSnapshot' {
         $script:Written[0].PartitionKey | Should -Be 'fabrikam.test'
     }
 }
+
+Describe 'Get-PSITFleetHealth with Defender machines' {
+    # A server onboarded by script never appears in Intune, and a fleet view that misses it calls
+    # an unmanaged machine healthy. What is pinned: the MDE-only row exists, its Intune readings
+    # are null rather than false, and a Defender side that cannot be read is named, never silent.
+
+    BeforeAll {
+        $script:Mde = @(
+            # Joined to PC-001 through the Entra id.
+            [pscustomobject]@{ id = 'mde-1'; computerDnsName = 'pc-001.contoso.test'; aadDeviceId = 'AAD-1'; healthStatus = 'Active'; riskScore = 'High'; osPlatform = 'Windows11'; lastSeen = '2026-08-27T07:00:00Z' }
+            # Known to Defender alone.
+            [pscustomobject]@{ id = 'mde-9'; computerDnsName = 'srv-legacy'; aadDeviceId = $null; healthStatus = 'Inactive'; riskScore = 'None'; osPlatform = 'WindowsServer2019'; lastSeen = '2026-08-20T07:00:00Z' }
+        )
+        $script:IntuneWithAad = @($script:Devices | Where-Object { $_.windowsProtectionState } | ForEach-Object {
+                $_ | Select-Object *, @{ n = 'azureADDeviceId'; e = { if ($_.deviceName -eq 'PC-001') { 'aad-1' } else { '' } } }
+            })
+    }
+
+    It 'appends the machine only Defender knows, with null Intune readings rather than false' {
+        $Result = Get-PSITFleetHealth -TenantFilter 'contoso.test' -Devices $script:IntuneWithAad -MdeMachines $script:Mde
+
+        $Server = $Result.Results | Where-Object { $_.DeviceName -eq 'srv-legacy' }
+        $Server.ManagedBy | Should -Be 'MDE'
+        # Null is "not readable here"; false would claim the protection is off.
+        $Server.ProtectionInDefault | Should -BeNullOrEmpty
+        # Inactive in Defender is a machine that stopped reporting: attention, said with its reason.
+        $Server.NeedsAttention | Should -BeTrue
+        $Result.Tenant.MdeOnly | Should -Be 1
+    }
+
+    It 'marks the joined machine and lifts a High risk score into attention' {
+        $Result = Get-PSITFleetHealth -TenantFilter 'contoso.test' -Devices $script:IntuneWithAad -MdeMachines $script:Mde
+
+        $Joined = $Result.Results | Where-Object { $_.DeviceName -eq 'PC-001' }
+        $Joined.ManagedBy | Should -Be 'Intune + MDE'
+        $Joined.RiskScore | Should -Be 'High'
+        # Healthy in Intune, High risk in Defender: the second wins the attention flag.
+        $Joined.NeedsAttention | Should -BeTrue
+    }
+
+    It 'names an unreadable Defender side instead of quietly showing Intune alone' {
+        Mock -CommandName New-GraphGetRequest -MockWith {
+            if ($uri -like '*securitycenter*') { throw '403 Forbidden' }
+            return $script:IntuneWithAad
+        }
+
+        $Result = Get-PSITFleetHealth -TenantFilter 'contoso.test'
+        @($Result.Metadata.Warnings)[0] | Should -Match 'Defender for Endpoint unreadable'
+        # The Intune rows still answer: one side down does not empty the fleet.
+        @($Result.Results).Count | Should -BeGreaterThan 0
+    }
+}
