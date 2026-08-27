@@ -280,3 +280,35 @@ Describe 'Set-PSITSocCase assignment' {
         $script:Written[0].AssignedTo | Should -BeNullOrEmpty
     }
 }
+
+Describe 'Set-PSITSocCase declared action time' {
+    # A mail sent at 9:12 and logged at 11:40 are two facts. The journal keeps both: the recorded
+    # time is server-set and beyond editing, the declared one is the analyst's statement, refused
+    # rather than corrected when it cannot be trusted.
+
+    BeforeEach {
+        $script:Written = [System.Collections.Generic.List[object]]::new()
+        Mock -CommandName Add-CIPPAzDataTableEntity -MockWith { $script:Written.Add($Entity) }
+        Mock -CommandName Get-CIPPAzDataTableEntity -MockWith { $null }
+    }
+
+    It 'keeps the declared time next to the recorded one' {
+        $null = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -Source 'manual' -TypeId 2 -Title 'x' -LogAction @{ Action = 'mail-client'; Detail = 'prévenu'; OccurredUtc = '2026-08-20T09:12:00Z' }
+
+        $Entry = @([string]$script:Written[0].ActionLog | ConvertFrom-Json) | Where-Object { $_.Action -eq 'mail-client' }
+        # ConvertFrom-Json re-types ISO strings as [datetime]: compared as instants, not text.
+        ([datetime]$Entry.OccurredUtc).ToUniversalTime() | Should -Be ([datetime]'2026-08-20T09:12:00Z').ToUniversalTime()
+        # The recorded time is still there, still server-set.
+        $Entry.Utc | Should -Not -BeNullOrEmpty
+    }
+
+    It 'refuses a declared time in the future' {
+        { Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -Source 'manual' -TypeId 2 -Title 'x' -LogAction @{ Action = 'mail'; OccurredUtc = ([datetime]::UtcNow.AddHours(2).ToString('o')) } } |
+            Should -Throw '*in the future*'
+    }
+
+    It 'refuses an unreadable declared time rather than guessing one' {
+        { Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -Source 'manual' -TypeId 2 -Title 'x' -LogAction @{ Action = 'mail'; OccurredUtc = 'hier vers 9h' } } |
+            Should -Throw '*not a readable date*'
+    }
+}

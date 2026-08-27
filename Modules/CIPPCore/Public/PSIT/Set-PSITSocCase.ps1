@@ -235,12 +235,28 @@ function Set-PSITSocCase {
         }
     }
     if ($LogAction -and -not [string]::IsNullOrWhiteSpace([string]$LogAction.Action)) {
-        $Log.Add([pscustomobject]@{
-                Utc     = $Now
-                Analyst = $Analyst
-                Action  = [string]$LogAction.Action
-                Detail  = [string]$LogAction.Detail
-            })
+        $Entry = [pscustomobject]@{
+            Utc     = $Now
+            Analyst = $Analyst
+            Action  = [string]$LogAction.Action
+            Detail  = [string]$LogAction.Detail
+        }
+        # The analyst may declare when the gesture actually happened: a mail sent at 9:12 and
+        # logged at 11:40 are two facts, and the journal keeps both. The recorded time stays
+        # server-set and beyond editing; the declared one is refused rather than corrected when
+        # unreadable or in the future, because a trail nobody trusts is not a trail.
+        if (-not [string]::IsNullOrWhiteSpace([string]$LogAction.OccurredUtc)) {
+            try {
+                $Occurred = ([datetime]$LogAction.OccurredUtc).ToUniversalTime()
+            } catch {
+                throw "OccurredUtc '$($LogAction.OccurredUtc)' is not a readable date. Use an ISO form such as 2026-08-27T09:12."
+            }
+            if ($Occurred -gt [datetime]::UtcNow.AddMinutes(5)) {
+                throw 'OccurredUtc is in the future: an action cannot be declared before it happened.'
+            }
+            $Entry | Add-Member -NotePropertyName OccurredUtc -NotePropertyValue ($Occurred.ToString('yyyy-MM-ddTHH:mm:ssZ'))
+        }
+        $Log.Add($Entry)
     }
     foreach ($Entry in $SystemLog) { $Log.Add($Entry) }
     # A table property caps at 64KB: keep the most recent entries rather than fail the write. The
