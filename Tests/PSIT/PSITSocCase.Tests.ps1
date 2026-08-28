@@ -312,3 +312,19 @@ Describe 'Set-PSITSocCase declared action time' {
             Should -Throw '*not a readable date*'
     }
 }
+
+Describe 'Set-PSITSocCase emitter tag and ticket link' {
+    BeforeEach {
+        $script:Written = [System.Collections.Generic.List[object]]::new()
+        Mock -CommandName Add-CIPPAzDataTableEntity -MockWith { $script:Written.Add($Entity) }
+        Mock -CommandName Get-CIPPAzDataTableEntity -MockWith { $null }
+    }
+
+    It 'keeps the emitter wording verbatim next to the SLA priority, never derived' {
+        $null = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -Source 'extsoc' -TypeId 2 -Title 'x' -Severity 'P2' -SeverityTag 'High Priority' -TicketUrl 'https://tickets.example.test/1'
+
+        $script:Written[0].Severity | Should -Be 'P2'
+        $script:Written[0].SeverityTag | Should -Be 'High Priority'
+        $script:Written[0].TicketUrl | Should -Be 'https://tickets.example.test/1'
+    }
+}

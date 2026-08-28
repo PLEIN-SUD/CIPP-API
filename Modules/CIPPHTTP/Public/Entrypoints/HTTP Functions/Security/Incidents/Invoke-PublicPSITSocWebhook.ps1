@@ -132,7 +132,7 @@ Function Invoke-PublicPSITSocWebhook {
         if (-not [string]::IsNullOrWhiteSpace($Alert.DetectionSource)) {
             $Parameters.DetectionSource = [string]$Alert.DetectionSource
         }
-        foreach ($Name in @('Severity', 'ExternalRef', 'TicketRef')) {
+        foreach ($Name in @('Severity', 'SeverityTag', 'ExternalRef', 'TicketRef', 'TicketUrl')) {
             if (-not [string]::IsNullOrWhiteSpace($Body.$Name)) { $Parameters.$Name = [string]$Body.$Name }
         }
         if ($null -ne $Body.Entities) {

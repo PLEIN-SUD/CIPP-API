@@ -40,7 +40,7 @@ Function Invoke-PSITExecSocCase {
     }
     # Scalars pass through when present; Set-PSITSocCase owns the validation so the rules live
     # in one place whatever the caller.
-    foreach ($Name in @('CaseId', 'Title', 'Source', 'Severity', 'Status', 'ExternalRef', 'TicketRef', 'Verdict', 'Justification')) {
+    foreach ($Name in @('CaseId', 'Title', 'Source', 'Severity', 'SeverityTag', 'Status', 'ExternalRef', 'TicketRef', 'TicketUrl', 'Verdict', 'Justification')) {
         $Value = Get-PSITSocRequestValue -Value $Request.Body.$Name
         if (-not [string]::IsNullOrWhiteSpace($Value)) { $Parameters.$Name = [string]$Value }
     }

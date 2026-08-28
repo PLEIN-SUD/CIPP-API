@@ -104,6 +104,8 @@ function ConvertFrom-PSITSocCaseRow {
         Entities      = & $ParseJson $Row.Entities ([pscustomobject]@{})
         ExternalRef   = [string]$Row.ExternalRef
         TicketRef     = [string]$Row.TicketRef
+        TicketUrl     = [string]$Row.TicketUrl
+        SeverityTag   = [string]$Row.SeverityTag
         Qualification = & $ParseJson $Row.Qualification $null
         GuideProgress = & $ParseJson $Row.GuideProgress ([pscustomobject]@{})
         ActionLog     = @(& $ParseJson $Row.ActionLog @())

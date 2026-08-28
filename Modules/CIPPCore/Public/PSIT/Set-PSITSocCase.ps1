@@ -82,6 +82,15 @@ function Set-PSITSocCase {
         # incident: nothing reads or writes the ticket itself.
         [string]$TicketRef,
 
+        # Clickable address of the ticket, built by the automation that created it: nothing here
+        # reads or writes the ticket itself.
+        [string]$TicketUrl,
+
+        # The emitter's own severity wording, kept verbatim next to ours. The taxonomy is explicit
+        # that the emitter's text tag is not its SLA priority: the two facts live in two fields,
+        # and neither is derived from the other.
+        [string]$SeverityTag,
+
         # The qualification. 'undetermined' is a real answer: the client is unreachable, the
         # question stands, and the case must be able to say so honestly.
         [ValidateSet('false-positive', 'true-positive', 'undetermined')]
@@ -290,6 +299,8 @@ function Set-PSITSocCase {
         Entities      = $EntitiesJson
         ExternalRef   = & $Keep $ExternalRef $Existing.ExternalRef
         TicketRef     = & $Keep $TicketRef $Existing.TicketRef
+        TicketUrl     = & $Keep $TicketUrl $Existing.TicketUrl
+        SeverityTag   = & $Keep $SeverityTag $Existing.SeverityTag
         Qualification = if ($Qualification) { [string]($Qualification | ConvertTo-Json -Depth 8 -Compress) } else { [string]$Existing.Qualification }
         GuideProgress = [string]([pscustomobject]$Progress | ConvertTo-Json -Depth 6 -Compress)
         ActionLog     = [string](@($Log) | ConvertTo-Json -Depth 6 -Compress -AsArray)
