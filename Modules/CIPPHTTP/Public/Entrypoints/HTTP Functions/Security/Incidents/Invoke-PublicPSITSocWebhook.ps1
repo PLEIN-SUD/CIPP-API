@@ -153,7 +153,7 @@ Function Invoke-PublicPSITSocWebhook {
         # able to tell "the name matched nothing" from "two clients matched".
         $null = Set-PSITSocCase -TenantFilter $Case.Tenant -CaseId $Case.CaseId -Analyst 'webhook' -LogAction @{
             Action = 'ingested'
-            Detail = "Tenant resolution: $($Resolution.Method) from '$TenantName'. Alert label: $($Alert.LabelId) ($($Alert.Status))."
+            Detail = "Tenant resolution: $($Resolution.Method) from '$TenantName'. Alert label: $($Alert.LabelId) ($($Alert.Status)).$(if ($Alert.EmitterTicket) { " Emitter ticket #$($Alert.EmitterTicket)." })"
         }
 
         return ([HttpResponseContext]@{

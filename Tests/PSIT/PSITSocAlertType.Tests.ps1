@@ -97,3 +97,17 @@ Describe 'Resolve-PSITSocAlertType' {
         $Result.Status | Should -Be 'WATCH'
     }
 }
+
+Describe 'the emitter ticket number' {
+    # The emitter's new subject format pastes its own ticket number in front of the block.
+    # Replying to the emitter goes through that number, so the case keeps it.
+    It 'captures the number pasted in front of the block' {
+        $Result = & $script:Resolve '#123698 - [SOC x CLIENT_A] - Connexion et activité dans deux pays - u@client-a.test'
+        $Result.EmitterTicket | Should -Be '123698'
+        $Result.TypeId | Should -Be 2
+    }
+
+    It 'stays empty on a subject without one, never invented' {
+        (& $script:Resolve '[SOC x CLIENT_A] - Connexion et activité dans deux pays').EmitterTicket | Should -BeNullOrEmpty
+    }
+}

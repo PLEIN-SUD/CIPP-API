@@ -166,10 +166,12 @@
       "and never has to reproduce this.",
       "The label/target separator is \" - \" with spaces, never a bare hyphen: hostnames and mail",
       "addresses contain hyphens.",
-      "The [SOC x ...] block is matched wherever it appears in the subject, not anchored at the start: real subjects arrive with a ticket number pasted in front of it."
+      "The [SOC x ...] block is matched wherever it appears in the subject, not anchored at the start: real subjects arrive with a ticket number pasted in front of it.",
+      "A ticket number pasted in front of the block (new emitter format, seen 2026-08-28) is captured as the emitter ticket: replying to the emitter goes through that number."
     ],
     "StripPrefixPattern": "^(?:\\s*(?:RE|R[ée]p|TR|FW|Fwd|Fw|Re)\\s*:\\s*|\\s*\\[EXT\\]\\s*)+",
     "MasterPattern": "\\[\\s*SOC\\s*x\\s*(?<scope>[^\\]]+?)\\s*\\]\\s*-?\\s*(?<label>.+?)(?:\\s+-\\s+(?:(?:Compte|Poste)\\s+)?(?<target>\\S+))?\\s*-?\\s*$",
-    "TargetFallbackPattern": "(?<target>[^\\s]+@[^\\s]+)\\s*$"
+    "TargetFallbackPattern": "(?<target>[^\\s]+@[^\\s]+)\\s*$",
+    "EmitterTicketPattern": "#(?<ticket>\\d{3,})\\s*-"
   }
 }

@@ -54,6 +54,7 @@ function Resolve-PSITSocAlertType {
         Label           = [string]$Subject
         Matched         = $false
         OutOfScope      = $false
+        EmitterTicket   = ''
     }
 
     if ([string]::IsNullOrWhiteSpace($Subject)) { return $Unmatched }
@@ -61,6 +62,15 @@ function Resolve-PSITSocAlertType {
     # Reply prefixes stack: a forwarded forward carries several. The pattern repeats, so one pass
     # clears them all.
     $Clean = [regex]::Replace($Subject, $Catalogue.subject.StripPrefixPattern, '', 'IgnoreCase').Trim()
+
+    # The emitter's own ticket number, when it pastes one in front of the block (its new format,
+    # first seen 2026-08-28): replying to the emitter goes through that number, so the case keeps
+    # it rather than stepping over it.
+    $EmitterTicket = ''
+    if ($Catalogue.subject.EmitterTicketPattern) {
+        $TicketMatch = [regex]::Match($Clean, $Catalogue.subject.EmitterTicketPattern)
+        if ($TicketMatch.Success) { $EmitterTicket = $TicketMatch.Groups['ticket'].Value }
+    }
 
     $Scope = ''
     $Target = ''
@@ -92,6 +102,7 @@ function Resolve-PSITSocAlertType {
                 Label           = $Label
                 Matched         = $true
                 OutOfScope      = $true
+                EmitterTicket   = $EmitterTicket
                 Reason          = [string]$Entry.Reason
             }
         }
@@ -109,6 +120,7 @@ function Resolve-PSITSocAlertType {
                 Label           = $Label
                 Matched         = $true
                 OutOfScope      = $false
+                EmitterTicket   = $EmitterTicket
             }
         }
     }
@@ -116,5 +128,6 @@ function Resolve-PSITSocAlertType {
     $Unmatched.Scope = $Scope
     $Unmatched.Target = $Target
     $Unmatched.Label = $Label
+    $Unmatched.EmitterTicket = $EmitterTicket
     return $Unmatched
 }
