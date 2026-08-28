@@ -93,7 +93,10 @@ Function Invoke-PublicPSITSocWebhook {
                 })
         }
 
-        $TenantName = @($Body.TenantFilter, $Body.TenantName, $Alert.Scope) |
+        # CompanyName joins the candidates: the automation resolves its PSA company before it
+        # calls here, and that name usually matches the tenant displayName. One more chance to
+        # land on the right client instead of answering unknown-tenant.
+        $TenantName = @($Body.TenantFilter, $Body.TenantName, $Alert.Scope, $Body.CompanyName) |
             Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
             Select-Object -First 1
 
