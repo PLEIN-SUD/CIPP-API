@@ -111,3 +111,19 @@ Describe 'the emitter ticket number' {
         (& $script:Resolve '[SOC x CLIENT_A] - Connexion et activité dans deux pays').EmitterTicket | Should -BeNullOrEmpty
     }
 }
+
+Describe 'the active-process wording' {
+    # The emitter's new EDR rule, met on a real alert: it lands on the suspicious-binary type
+    # directly now, instead of parking on the catch-all for an analyst to reclassify.
+    It 'maps to the suspicious-binary type, junk prefix and all' {
+        $Result = & $script:Resolve '#123698 - [SOC x CLIENT_A] - Processus opensupdater actif détecté - poste-01.client-a.local'
+        $Result.TypeId | Should -Be 11
+        $Result.LabelId | Should -Be 'EDR_PROCESS_ACTIVE'
+        $Result.Target | Should -Be 'poste-01.client-a.local'
+        $Result.EmitterTicket | Should -Be '123698'
+    }
+
+    It 'does not swallow the identity labels: the generic order still holds' {
+        (& $script:Resolve '[SOC x CLIENT_A] - Ajout de droit privilégié par l''utilisateur a@client-a.test').TypeId | Should -Be 4
+    }
+}

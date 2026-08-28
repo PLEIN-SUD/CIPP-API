@@ -140,6 +140,13 @@
       "Pattern": "^Suspicious\\s+service\\s+launched$"
     },
     {
+      "LabelId": "EDR_PROCESS_ACTIVE",
+      "TypeId": 11,
+      "DetectionSource": "unknown",
+      "Status": "ACTIVE",
+      "Pattern": "Processus\\s+(?<binary>[\\w\\.\\-]+)\\s+actif\\s+détecté"
+    },
+    {
       "LabelId": "EDR_BINARY_ACTIVITY",
       "TypeId": 11,
       "DetectionSource": "unknown",
