@@ -135,6 +135,10 @@ Function Invoke-PublicPSITSocWebhook {
         foreach ($Name in @('Severity', 'SeverityTag', 'ExternalRef', 'TicketRef', 'TicketUrl')) {
             if (-not [string]::IsNullOrWhiteSpace($Body.$Name)) { $Parameters.$Name = [string]$Body.$Name }
         }
+        # 'Unknown' is the automation's word for "the mail named no priority": an absence, not a
+        # tag. Stored, it would shadow forever a Severity set by hand on the case, because the
+        # queue shows the emitter's tag over the P level whenever one exists.
+        if ($Parameters['SeverityTag'] -eq 'Unknown') { $null = $Parameters.Remove('SeverityTag') }
         if ($null -ne $Body.Entities) {
             $Parameters.Entities = $Body.Entities
         } elseif (-not [string]::IsNullOrWhiteSpace($Alert.Target)) {
