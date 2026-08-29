@@ -90,6 +90,29 @@ Describe 'Invoke-PublicPSITSocWebhook severity fields' {
         Should -Invoke Set-PSITSocCase -Times 1 -ParameterFilter { $Severity -eq 'P2' }
     }
 
+    It 'keeps an emitter word out of the P level and files it as the tag instead' {
+        # A replay that put the wording in Severity either lost the ingestion to the P1-P4
+        # validation or filed a case that no longer sorts. Both were seen in production rows.
+        $Request = New-WebhookRequest -Body @{ Subject = '[SOC x Contoso] - Test - user'; Severity = 'High Priority' }
+        $Result = Invoke-PublicPSITSocWebhook -Request $Request -TriggerMetadata $null
+
+        $Result.Body.Ingested | Should -BeTrue
+        Should -Invoke Set-PSITSocCase -Times 0 -ParameterFilter { $null -ne $Severity -and $Severity -ne '' }
+        Should -Invoke Set-PSITSocCase -Times 1 -ParameterFilter { $SeverityTag -eq 'High Priority' }
+    }
+
+    It 'never lets a stray word overwrite a tag the caller supplied' {
+        $Request = New-WebhookRequest -Body @{ Subject = '[SOC x Contoso] - Test - user'; Severity = 'High Priority'; SeverityTag = 'Critical' }
+        $null = Invoke-PublicPSITSocWebhook -Request $Request -TriggerMetadata $null
+        Should -Invoke Set-PSITSocCase -Times 1 -ParameterFilter { $SeverityTag -eq 'Critical' }
+    }
+
+    It 'passes a real P level through untouched' {
+        $Request = New-WebhookRequest -Body @{ Subject = '[SOC x Contoso] - Test - user'; Severity = 'P1' }
+        $null = Invoke-PublicPSITSocWebhook -Request $Request -TriggerMetadata $null
+        Should -Invoke Set-PSITSocCase -Times 1 -ParameterFilter { $Severity -eq 'P1' }
+    }
+
     It 'sends no tag at all when the caller sent none' {
         $Request = New-WebhookRequest -Body @{ Subject = '[SOC x Contoso] - Test - user' }
         $Result = Invoke-PublicPSITSocWebhook -Request $Request -TriggerMetadata $null

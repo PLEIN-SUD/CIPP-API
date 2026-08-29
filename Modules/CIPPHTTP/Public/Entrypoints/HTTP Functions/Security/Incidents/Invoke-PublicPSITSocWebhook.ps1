@@ -139,6 +139,20 @@ Function Invoke-PublicPSITSocWebhook {
         # tag. Stored, it would shadow forever a Severity set by hand on the case, because the
         # queue shows the emitter's tag over the P level whenever one exists.
         if ($Parameters['SeverityTag'] -eq 'Unknown') { $null = $Parameters.Remove('SeverityTag') }
+        # Severity is our P level and Set-PSITSocCase validates it as one. A caller sending the
+        # emitter's own wording there ('High Priority') would either lose the whole ingestion to a
+        # validation error or file a case that no longer sorts, which is what production rows
+        # created by a replay actually show. The words are a tag, so they go where tags go, and
+        # the P level is left to the analyst rather than guessed from a vocabulary that is not
+        # ours to map.
+        if ($Parameters.ContainsKey('Severity') -and $Parameters['Severity'] -notmatch '^P[1-4]$') {
+            $Stray = [string]$Parameters['Severity']
+            $null = $Parameters.Remove('Severity')
+            if (-not $Parameters.ContainsKey('SeverityTag') -and $Stray -ne 'Unknown') {
+                $Parameters.SeverityTag = $Stray
+            }
+            Write-LogMessage -API 'PSITSocWebhook' -tenant 'CIPP' -message "SOC webhook: '$Stray' is not a P level and was kept as the emitter's tag instead." -sev Info
+        }
         if ($null -ne $Body.Entities) {
             $Parameters.Entities = $Body.Entities
         } elseif (-not [string]::IsNullOrWhiteSpace($Alert.Target)) {
