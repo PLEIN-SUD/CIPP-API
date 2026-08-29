@@ -30,6 +30,14 @@ function Get-PSITSocAnalysts {
         answering nothing, and two lists that exist without meeting. None of them empties the list:
         addresses are shown, because handing a dossier over is exactly the gesture an outage should
         not block.
+
+        Those are Warnings: something is wrong and the analyst should see it. Which source the list
+        came from is a Note instead - true, worth knowing once on the settings screen, and no
+        business interrupting a triage screen every time it opens. The two are answered separately
+        so each is read where it can be acted on.
+
+        Both are written in French: they are shown to the analysts, and this section is theirs. The
+        log lines stay in English, like every other log in this repository.
     .FUNCTIONALITY
         Internal
     #>
@@ -37,6 +45,7 @@ function Get-PSITSocAnalysts {
     param()
 
     $Warnings = [System.Collections.Generic.List[string]]::new()
+    $Notes = [System.Collections.Generic.List[string]]::new()
 
     # A configured group answers on its own: it names the team, which neither list below does.
     $Group = Get-PSITSocAnalystGroup
@@ -55,17 +64,18 @@ function Get-PSITSocAnalysts {
                         }
                     })
             if ($Analysts.Count -eq 0) {
-                $Warnings.Add("The group '$($Group.GroupName)' holds no enabled user, so no analyst can be proposed. Check its membership, or clear the group to fall back on the portal's user list.")
+                $Warnings.Add("Le groupe « $($Group.GroupName) » ne contient aucun utilisateur actif : aucun analyste ne peut être proposé. Vérifiez ses membres, ou retirez le groupe pour revenir aux utilisateurs du portail.")
             }
             return [pscustomobject]@{
                 Analysts = @($Analysts | Sort-Object -Property @{ Expression = { if ($_.displayName) { $_.displayName } else { $_.userPrincipalName } } })
                 Warnings = @($Warnings)
+                Notes    = @("Analystes pris dans le groupe « $($Group.GroupName) ».")
             }
         } catch {
             # The configured group is the stated intent: falling back to a wider list without
             # saying so would quietly offer people the group deliberately excludes.
-            $Warnings.Add("The analyst group '$($Group.GroupName)' could not be read ($($_.Exception.Message)). No analyst is proposed rather than a list the group was meant to narrow.")
-            return [pscustomobject]@{ Analysts = @(); Warnings = @($Warnings) }
+            $Warnings.Add("Le groupe d'analystes « $($Group.GroupName) » n'a pas pu être lu ($($_.Exception.Message)). Aucun analyste n'est proposé, plutôt qu'une liste que ce groupe était censé restreindre.")
+            return [pscustomobject]@{ Analysts = @(); Warnings = @($Warnings); Notes = @() }
         }
     }
 
@@ -89,10 +99,10 @@ function Get-PSITSocAnalysts {
                 $_.userPrincipalName -and $_.accountEnabled -ne $false -and $_.userType -ne 'Guest'
             })
         if ($Directory.Count -eq 0) {
-            $Warnings.Add('Display names unavailable: the partner tenant answered without a single account. Addresses are shown instead.')
+            $Warnings.Add('Noms indisponibles : le tenant partenaire a répondu sans aucun compte. Les adresses sont affichées à la place.')
         }
     } catch {
-        $Warnings.Add("Display names unavailable: the partner tenant did not answer ($($_.Exception.Message)). Addresses are shown instead.")
+        $Warnings.Add("Noms indisponibles : le tenant partenaire n'a pas répondu ($($_.Exception.Message)). Les adresses sont affichées à la place.")
     }
 
     $NamesByUpn = @{}
@@ -117,7 +127,7 @@ function Get-PSITSocAnalysts {
         # not meet. Saying which two counts failed to join is the difference between a fixable
         # report and 'the names do not show'.
         if ($NamesByUpn.Count -gt 0 -and @($Analysts | Where-Object { $_.displayName }).Count -eq 0) {
-            $Warnings.Add("Display names unavailable: none of the $($Roster.Count) portal users matched any of the $($NamesByUpn.Count) accounts read from the partner tenant. Addresses are shown instead.")
+            $Warnings.Add("Noms indisponibles : aucun des $($Roster.Count) utilisateurs du portail ne correspond aux $($NamesByUpn.Count) comptes lus sur le tenant partenaire. Les adresses sont affichées à la place.")
         }
     } else {
         # No roster at all. Listing the tenant's accounts keeps reassignment working, and the
@@ -129,11 +139,14 @@ function Get-PSITSocAnalysts {
                     jobTitle          = [string]$_.jobTitle
                 }
             })
-        $Warnings.Add("The portal's user list is empty, so the $($Analysts.Count) accounts of the partner tenant are listed instead. Add the analysts under CIPP > Advanced > Authentication > CIPP Users to assign dossiers from the portal's own roster.")
+        # A note, not a warning: nothing is broken, the list simply comes from the directory. It
+        # belongs on the settings screen, where a group can be named, not above a triage queue.
+        $Notes.Add("La liste des utilisateurs du portail est vide : les $($Analysts.Count) comptes du tenant partenaire sont proposés. Indiquez un groupe d'analystes ci-dessous pour n'en proposer qu'une équipe.")
     }
 
     [PSCustomObject]@{
         Analysts = @($Analysts | Sort-Object -Property @{ Expression = { if ($_.displayName) { $_.displayName } else { $_.userPrincipalName } } })
         Warnings = @($Warnings)
+        Notes    = @($Notes)
     }
 }

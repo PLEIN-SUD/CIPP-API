@@ -68,7 +68,7 @@ Describe 'Get-PSITSocAnalysts with a portal roster' {
 
         $Result.Analysts | Should -HaveCount 2
         $Result.Analysts[0].displayName | Should -Be ''
-        $Result.Warnings[0] | Should -Match 'did not answer'
+        $Result.Warnings[0] | Should -Match "n'a pas répondu"
     }
 
     It 'reports a Graph that answered nothing, instead of showing addresses in silence' {
@@ -77,7 +77,7 @@ Describe 'Get-PSITSocAnalysts with a portal roster' {
         $Result = Get-PSITSocAnalysts
 
         $Result.Analysts | Should -HaveCount 2
-        $Result.Warnings[0] | Should -Match 'without a single account'
+        $Result.Warnings[0] | Should -Match 'sans aucun compte'
     }
 
     It 'reports two lists that exist and never meet, with both counts' {
@@ -87,7 +87,7 @@ Describe 'Get-PSITSocAnalysts with a portal roster' {
 
         $Result = Get-PSITSocAnalysts
 
-        $Result.Warnings[0] | Should -Match 'none of the 2 portal users matched any of the 1 accounts'
+        $Result.Warnings[0] | Should -Match 'aucun des 2 utilisateurs du portail ne correspond aux 1 comptes'
     }
 
     It 'unwraps a response envelope rather than reporting an outage that did not happen' {
@@ -131,9 +131,9 @@ Describe 'Get-PSITSocAnalysts without a portal roster' {
         $Result.Analysts[0].displayName | Should -Be 'Alice Analyste'
     }
 
-    It 'says the list is the directory and not the portal roster' {
+    It 'says the list is the directory as a note, not a warning above the triage queue' {
         $Result = Get-PSITSocAnalysts
-        $Result.Warnings[0] | Should -Match "portal's user list is empty"
+        $Result.Notes[0] | Should -Match 'liste des utilisateurs du portail est vide'
     }
 
     It 'leaves out disabled accounts and guests, who cannot hold a dossier' {
@@ -148,7 +148,7 @@ Describe 'Get-PSITSocAnalysts without a portal roster' {
         $Result = Get-PSITSocAnalysts
 
         $Result.Analysts | Should -HaveCount 0
-        $Result.Warnings | Should -HaveCount 2
+        $Result.Warnings | Should -HaveCount 1
     }
 }
 
@@ -199,7 +199,7 @@ Describe 'Get-PSITSocAnalysts with a configured group' {
         $Result = Get-PSITSocAnalysts
 
         $Result.Analysts | Should -HaveCount 0
-        $Result.Warnings[0] | Should -Match 'could not be read'
+        $Result.Warnings[0] | Should -Match "n'a pas pu être lu"
     }
 
     It 'says the group is empty rather than proposing an empty picker in silence' {
@@ -208,7 +208,7 @@ Describe 'Get-PSITSocAnalysts with a configured group' {
         $Result = Get-PSITSocAnalysts
 
         $Result.Analysts | Should -HaveCount 0
-        $Result.Warnings[0] | Should -Match 'holds no enabled user'
+        $Result.Warnings[0] | Should -Match 'aucun utilisateur actif'
     }
 }
 
