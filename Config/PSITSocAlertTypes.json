@@ -22,7 +22,7 @@
     },
     {
       "LabelId": "IDENT_IMPOSSIBLE_CONNECTION",
-      "TypeId": 3,
+      "TypeId": 1,
       "DetectionSource": "entra",
       "Status": "WATCH",
       "Pattern": "Connexion\\s+impossible"
@@ -85,7 +85,7 @@
     },
     {
       "LabelId": "EDR_MALWARE",
-      "TypeId": 13,
+      "TypeId": 12,
       "DetectionSource": "xdr",
       "Status": "ACTIVE",
       "Pattern": "(?:Alerte\\s+)?Malware\\s+(?<family>[\\w\\-]+)\\s+détecté"
@@ -99,21 +99,21 @@
     },
     {
       "LabelId": "LH_MALWARE_ACTIVE_BLOCKED",
-      "TypeId": 13,
+      "TypeId": 12,
       "DetectionSource": "xdr",
       "Status": "ACTIVE",
       "Pattern": "^An\\s+active\\s+'(?<family>[^']+)'\\s+malware\\s+was\\s+blocked$"
     },
     {
       "LabelId": "LH_MALWARE_PREVENTED",
-      "TypeId": 13,
+      "TypeId": 12,
       "DetectionSource": "xdr",
       "Status": "ACTIVE",
       "Pattern": "^'(?<family>[^']+)'\\s+malware\\s+was\\s+prevented$"
     },
     {
       "LabelId": "LH_PUA_PREVENTED",
-      "TypeId": 14,
+      "TypeId": 12,
       "DetectionSource": "xdr",
       "Status": "ACTIVE",
       "Pattern": "^'(?<family>[^']+)'\\s+unwanted\\s+software\\s+was\\s+prevented$"
@@ -127,14 +127,14 @@
     },
     {
       "LabelId": "LH_SUSPICIOUS_FILE",
-      "TypeId": 16,
+      "TypeId": 11,
       "DetectionSource": "xdr",
       "Status": "ACTIVE",
       "Pattern": "^A\\s+suspicious\\s+file\\s+was\\s+observed$"
     },
     {
       "LabelId": "LH_SUSPICIOUS_SERVICE",
-      "TypeId": 17,
+      "TypeId": 10,
       "DetectionSource": "xdr",
       "Status": "ACTIVE",
       "Pattern": "^Suspicious\\s+service\\s+launched$"

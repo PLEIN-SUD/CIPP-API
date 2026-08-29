@@ -57,13 +57,15 @@ Describe 'Resolve-PSITSocAlertType' {
 
     It 'reads a portal notification subject, which carries no scope prefix at all' {
         $Result = & $script:Resolve "An active 'Wacatac' malware was blocked"
-        $Result.TypeId | Should -Be 13
+        # Type 12 since the merge: the Lighthouse family repeated the endpoint one in English,
+        # and a blocked malware is a blocked detection whichever portal words it.
+        $Result.TypeId | Should -Be 12
         $Result.LabelId | Should -Be 'LH_MALWARE_ACTIVE_BLOCKED'
     }
 
     It 'sends both malware wordings to the same type' {
-        (& $script:Resolve "'Malgent' malware was prevented").TypeId | Should -Be 13
-        (& $script:Resolve "An active 'Wacatac' malware was blocked").TypeId | Should -Be 13
+        (& $script:Resolve "'Malgent' malware was prevented").TypeId | Should -Be 12
+        (& $script:Resolve "An active 'Wacatac' malware was blocked").TypeId | Should -Be 12
     }
 
     It 'opens a case on the catch-all type rather than dropping an unknown subject' {
@@ -93,7 +95,8 @@ Describe 'Resolve-PSITSocAlertType' {
 
     It 'marks the correlation rule as watched, since no message carrying it has been seen' {
         $Result = & $script:Resolve '[SOC x CLIENT_A] - Connexion impossible - utilisateur@client-a.test'
-        $Result.TypeId | Should -Be 3
+        # Type 1 since the merge: this rule only ever said "run the suspicious sign-in guide".
+        $Result.TypeId | Should -Be 1
         $Result.Status | Should -Be 'WATCH'
     }
 }
