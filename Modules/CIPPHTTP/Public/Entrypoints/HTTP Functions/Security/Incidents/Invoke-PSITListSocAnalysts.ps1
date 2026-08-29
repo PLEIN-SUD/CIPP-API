@@ -1,7 +1,7 @@
 Function Invoke-PSITListSocAnalysts {
     <#
     .FUNCTIONALITY
-        Entrypoint
+        Entrypoint,AnyTenant
     .ROLE
         Security.Incident.Read
     .DESCRIPTION
@@ -9,6 +9,16 @@ Function Invoke-PSITListSocAnalysts {
         name, for the queue's reassignment picker. Read-only, and deliberately not the platform's
         own user administration endpoint, which is super-admin territory: an analyst reassigning
         a case needs names, not roles.
+
+        AnyTenant, and it has to be: this endpoint answers about the people who use the portal,
+        not about any customer. Called without a tenantFilter - it has no tenant to filter on -
+        the access check falls back to the partner tenant, which no customer-scoped role is
+        allowed to see, and the whole endpoint answers 403. That is what made the queue show
+        addresses where names belong, and left the reassignment picker empty. The upstream
+        endpoint reading the same table declares AnyTenant for exactly this reason.
+
+        No tenant scoping is skipped by that declaration, because there is no tenant data here:
+        the list is the allowedUsers table, which is the portal's own roster.
     #>
     [CmdletBinding()]
     param($Request, $TriggerMetadata)

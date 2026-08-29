@@ -5,8 +5,7 @@ function Get-PSITSocAnalysts {
     .DESCRIPTION
         The people a case can be assigned to are the people who can sign in to this portal: the
         allowedUsers table, which is what the platform's own user management maintains. Their
-        display names come from Graph on the partner tenant, where those accounts live - the
-        same place the top banner's avatar photo is read from.
+        display names come from Graph on the partner tenant, where those accounts live.
 
         A Graph failure degrades to email-only entries with a named warning, never to an empty
         list: reassignment must keep working when Graph does not, because handing a case over is

@@ -75,3 +75,28 @@ Describe 'Get-PSITSocAnalysts' {
         Should -Invoke New-GraphGetRequest -Times 0
     }
 }
+
+Describe 'Invoke-PSITListSocAnalysts access declaration' {
+    # The bug this pins: the endpoint declared Entrypoint alone. The front calls it without a
+    # tenantFilter - it has no tenant to filter on - so the access check fell back to the partner
+    # tenant, which no customer-scoped role may see, and the endpoint answered 403 to everyone.
+    # The queue then showed addresses where names belong and the reassignment picker stayed empty,
+    # with nothing in the code saying why. Every other PSIT endpoint takes a real tenantFilter;
+    # this is the only tenant-agnostic one, so it is the only one that needs the declaration.
+    BeforeAll {
+        $Root = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSCommandPath))
+        $script:EndpointPath = Get-ChildItem -Path (Join-Path $Root 'Modules') -Recurse -Filter 'Invoke-PSITListSocAnalysts.ps1' -File |
+            Select-Object -First 1 -ExpandProperty FullName
+    }
+
+    It 'is declared AnyTenant, without which it answers 403 to every customer-scoped role' {
+        $script:EndpointPath | Should -Not -BeNullOrEmpty
+        $Source = [System.IO.File]::ReadAllText($script:EndpointPath)
+        $Source | Should -Match '(?m)^\s*Entrypoint,AnyTenant\s*$'
+    }
+
+    It 'still asks for a role: AnyTenant widens the tenant, never the permission' {
+        $Source = [System.IO.File]::ReadAllText($script:EndpointPath)
+        $Source | Should -Match '(?m)^\s*Security\.Incident\.Read\s*$'
+    }
+}
