@@ -66,6 +66,46 @@ Describe 'Get-PSITSocAnalysts' {
         $Result.Warnings[0] | Should -Match 'Display names unavailable'
     }
 
+    It 'reports a Graph that answered nothing, instead of showing addresses in silence' {
+        # The state that cost an afternoon of guessing: no error, no warning, and no names. An
+        # outage was reported; an empty answer was not, and the screen looked identical.
+        Mock -CommandName New-GraphGetRequest -MockWith { @() }
+
+        $Result = Get-PSITSocAnalysts
+
+        $Result.Analysts | Should -HaveCount 2
+        $Result.Warnings | Should -HaveCount 1
+        $Result.Warnings[0] | Should -Match 'without a single user'
+    }
+
+    It 'reports two lists that exist and never meet, with both counts' {
+        Mock -CommandName New-GraphGetRequest -MockWith {
+            @([PSCustomObject]@{ userPrincipalName = 'quelquun.dautre@partner.test'; displayName = 'Quelqu un' })
+        }
+
+        $Result = Get-PSITSocAnalysts
+
+        $Result.Warnings[0] | Should -Match 'none of the 2 portal users matched any of the 1 accounts'
+    }
+
+    It 'unwraps a response envelope rather than reporting an outage that did not happen' {
+        # If the helper ever hands back the envelope, every row fails the userPrincipalName
+        # filter and the join answers no names with nothing wrong on the wire.
+        Mock -CommandName New-GraphGetRequest -MockWith {
+            [PSCustomObject]@{
+                value = @(
+                    [PSCustomObject]@{ userPrincipalName = 'a.analyste@partner.test'; displayName = 'Alice Analyste' }
+                )
+            }
+        }
+
+        $Result = Get-PSITSocAnalysts
+
+        ($Result.Analysts | Where-Object { $_.userPrincipalName -eq 'a.analyste@partner.test' }).displayName |
+            Should -Be 'Alice Analyste'
+        $Result.Warnings | Should -HaveCount 0
+    }
+
     It 'answers an empty table with an empty list and no Graph call' {
         Mock -CommandName Get-CIPPAzDataTableEntity -MockWith { @() }
 
