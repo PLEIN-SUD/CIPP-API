@@ -3,9 +3,14 @@ function Get-PSITSocAnalysts {
     .SYNOPSIS
         Lists the people a SOC dossier can be assigned to.
     .DESCRIPTION
-        Two sources, in order of authority.
+        Three sources, in order of authority.
 
-        The platform's own roster first: the allowedUsers table, which is what the CIPP Users page
+        An Entra group when one is configured: the team that actually takes SOC work is often a
+        group already, and naming it is more precise than either list below. Its id lives in
+        configuration, never in this repository, because it is a production fact about one tenant
+        and these repositories are public.
+
+        The platform's own roster next: the allowedUsers table, which is what the CIPP Users page
         maintains - the list that decides who reaches which page of this portal. It is the right
         answer when it exists, because holding a role here is what makes someone assignable.
 
@@ -33,6 +38,37 @@ function Get-PSITSocAnalysts {
 
     $Warnings = [System.Collections.Generic.List[string]]::new()
 
+    # A configured group answers on its own: it names the team, which neither list below does.
+    $Group = Get-PSITSocAnalystGroup
+    if ($Group) {
+        try {
+            # transitiveMembers, like the platform's own user sync: an analyst in a nested group is
+            # still an analyst. Same call shape, app-only, against the partner tenant.
+            $Members = @(New-GraphGetRequest -uri "https://graph.microsoft.com/v1.0/groups/$($Group.GroupId)/transitiveMembers?`$select=id,userPrincipalName,displayName,accountEnabled,jobTitle&`$top=999" -tenantid $env:TenantID -NoAuthCheck $true -AsApp $true)
+            $Analysts = @($Members |
+                    Where-Object { $_.userPrincipalName -and $_.accountEnabled -ne $false } |
+                    ForEach-Object {
+                        [pscustomobject]@{
+                            userPrincipalName = [string]$_.userPrincipalName
+                            displayName       = [string]$_.displayName
+                            jobTitle          = [string]$_.jobTitle
+                        }
+                    })
+            if ($Analysts.Count -eq 0) {
+                $Warnings.Add("The group '$($Group.GroupName)' holds no enabled user, so no analyst can be proposed. Check its membership, or clear the group to fall back on the portal's user list.")
+            }
+            return [pscustomobject]@{
+                Analysts = @($Analysts | Sort-Object -Property @{ Expression = { if ($_.displayName) { $_.displayName } else { $_.userPrincipalName } } })
+                Warnings = @($Warnings)
+            }
+        } catch {
+            # The configured group is the stated intent: falling back to a wider list without
+            # saying so would quietly offer people the group deliberately excludes.
+            $Warnings.Add("The analyst group '$($Group.GroupName)' could not be read ($($_.Exception.Message)). No analyst is proposed rather than a list the group was meant to narrow.")
+            return [pscustomobject]@{ Analysts = @(); Warnings = @($Warnings) }
+        }
+    }
+
     $Table = Get-CippTable -tablename 'allowedUsers'
     # Rows starting with '_' are the table's own bookkeeping, the same exclusion the platform's
     # user management applies.
@@ -42,7 +78,7 @@ function Get-PSITSocAnalysts {
     try {
         # One page covers a partner tenant's staff. Same call shape as Start-UserSyncTimer, which
         # is the function that fills the table read above.
-        $GraphUsers = New-GraphGetRequest -uri "https://graph.microsoft.com/v1.0/users?`$select=userPrincipalName,displayName,accountEnabled,userType&`$top=999" -tenantid $env:TenantID -NoAuthCheck $true -AsApp $true
+        $GraphUsers = New-GraphGetRequest -uri "https://graph.microsoft.com/v1.0/users?`$select=userPrincipalName,displayName,accountEnabled,userType,jobTitle&`$top=999" -tenantid $env:TenantID -NoAuthCheck $true -AsApp $true
         # The helper unwraps the response's value collection, but a caller that ever got the
         # envelope instead would see every row fail the filter below and answer 'no names' without
         # a single error. Unwrap defensively rather than report an outage that did not happen.
@@ -60,8 +96,11 @@ function Get-PSITSocAnalysts {
     }
 
     $NamesByUpn = @{}
+    $TitlesByUpn = @{}
     foreach ($GraphUser in $Directory) {
-        $NamesByUpn[$GraphUser.userPrincipalName.ToLowerInvariant()] = [string]$GraphUser.displayName
+        $Key = $GraphUser.userPrincipalName.ToLowerInvariant()
+        $NamesByUpn[$Key] = [string]$GraphUser.displayName
+        $TitlesByUpn[$Key] = [string]$GraphUser.jobTitle
     }
 
     if ($Roster.Count -gt 0) {
@@ -70,6 +109,7 @@ function Get-PSITSocAnalysts {
             [PSCustomObject]@{
                 userPrincipalName = $Upn
                 displayName       = [string]($NamesByUpn[$Upn.ToLowerInvariant()] ?? '')
+                jobTitle          = [string]($TitlesByUpn[$Upn.ToLowerInvariant()] ?? '')
             }
         }
         $Analysts = @($Analysts)
@@ -86,6 +126,7 @@ function Get-PSITSocAnalysts {
                 [PSCustomObject]@{
                     userPrincipalName = [string]$_.userPrincipalName
                     displayName       = [string]$_.displayName
+                    jobTitle          = [string]$_.jobTitle
                 }
             })
         $Warnings.Add("The portal's user list is empty, so the $($Analysts.Count) accounts of the partner tenant are listed instead. Add the analysts under CIPP > Advanced > Authentication > CIPP Users to assign dossiers from the portal's own roster.")

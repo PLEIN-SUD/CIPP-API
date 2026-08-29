@@ -18,12 +18,14 @@ BeforeAll {
     function Get-CippTable { param($tablename) }
     function Get-CIPPAzDataTableEntity { param($Context, $Filter) }
     function New-GraphGetRequest { param($uri, $tenantid, $NoAuthCheck, $AsApp) }
+    function Get-PSITSocAnalystGroup { }
 
     . $FunctionPath
 }
 
 Describe 'Get-PSITSocAnalysts with a portal roster' {
     BeforeEach {
+        Mock -CommandName Get-PSITSocAnalystGroup -MockWith { $null }
         Mock -CommandName Get-CippTable -MockWith { @{ Context = 'allowedUsers' } }
         Mock -CommandName Get-CIPPAzDataTableEntity -MockWith {
             @(
@@ -110,6 +112,7 @@ Describe 'Get-PSITSocAnalysts without a portal roster' {
     # from the Entra-group sync. A portal whose access is granted only through the static web
     # app invitations has an empty table while people use it daily, and the picker offered nothing.
     BeforeEach {
+        Mock -CommandName Get-PSITSocAnalystGroup -MockWith { $null }
         Mock -CommandName Get-CippTable -MockWith { @{ Context = 'allowedUsers' } }
         Mock -CommandName Get-CIPPAzDataTableEntity -MockWith { @() }
         Mock -CommandName New-GraphGetRequest -MockWith {
@@ -146,6 +149,66 @@ Describe 'Get-PSITSocAnalysts without a portal roster' {
 
         $Result.Analysts | Should -HaveCount 0
         $Result.Warnings | Should -HaveCount 2
+    }
+}
+
+
+Describe 'Get-PSITSocAnalysts with a configured group' {
+    # A group names the team, which neither the portal roster nor the tenant directory does.
+    # When one is set it answers alone: falling back to a wider list would quietly offer the
+    # very people the group was chosen to exclude.
+    BeforeEach {
+        Mock -CommandName Get-PSITSocAnalystGroup -MockWith {
+            [PSCustomObject]@{ GroupId = '00000000-0000-0000-0000-000000000001'; GroupName = 'Analystes SOC' }
+        }
+        Mock -CommandName Get-CippTable -MockWith { @{ Context = 'allowedUsers' } }
+        Mock -CommandName Get-CIPPAzDataTableEntity -MockWith {
+            @([PSCustomObject]@{ RowKey = 'quelquun.dautre@partner.test' })
+        }
+        Mock -CommandName New-GraphGetRequest -MockWith {
+            @(
+                [PSCustomObject]@{ userPrincipalName = 'a.analyste@partner.test'; displayName = 'Alice Analyste'; accountEnabled = $true }
+                [PSCustomObject]@{ userPrincipalName = 'parti@partner.test'; displayName = 'Compte desactive'; accountEnabled = $false }
+                [PSCustomObject]@{ id = 'un-groupe-imbrique'; displayName = 'Sous-groupe' }
+            )
+        }
+    }
+
+    It 'proposes the group members and nobody else' {
+        $Result = Get-PSITSocAnalysts
+
+        $Result.Analysts | Should -HaveCount 1
+        $Result.Analysts[0].userPrincipalName | Should -Be 'a.analyste@partner.test'
+        # The portal roster is not consulted at all: the group is the stated intent.
+        $Result.Analysts.userPrincipalName | Should -Not -Contain 'quelquun.dautre@partner.test'
+    }
+
+    It 'reads members transitively, so a nested group still holds analysts' {
+        $Result = Get-PSITSocAnalysts
+        Should -Invoke New-GraphGetRequest -Times 1 -ParameterFilter { $uri -match 'transitiveMembers' }
+    }
+
+    It 'leaves out a group member that is not an enabled user' {
+        $Result = Get-PSITSocAnalysts
+        $Result.Analysts.userPrincipalName | Should -Not -Contain 'parti@partner.test'
+    }
+
+    It 'proposes nobody, and says why, when the group cannot be read' {
+        Mock -CommandName New-GraphGetRequest -MockWith { throw 'group not found' }
+
+        $Result = Get-PSITSocAnalysts
+
+        $Result.Analysts | Should -HaveCount 0
+        $Result.Warnings[0] | Should -Match 'could not be read'
+    }
+
+    It 'says the group is empty rather than proposing an empty picker in silence' {
+        Mock -CommandName New-GraphGetRequest -MockWith { @() }
+
+        $Result = Get-PSITSocAnalysts
+
+        $Result.Analysts | Should -HaveCount 0
+        $Result.Warnings[0] | Should -Match 'holds no enabled user'
     }
 }
 
