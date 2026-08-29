@@ -5,15 +5,17 @@ function Get-PSITSocAnalysts {
     .DESCRIPTION
         Two sources, in order of authority.
 
-        The platform's own roster first: the allowedUsers table, which names the people who hold a
-        role in this portal. It is the right answer when it exists.
+        The platform's own roster first: the allowedUsers table, which is what the CIPP Users page
+        maintains - the list that decides who reaches which page of this portal. It is the right
+        answer when it exists, because holding a role here is what makes someone assignable.
 
-        It does not always exist. Only Start-UserSyncTimer writes it, and only for deployments that
-        map Entra security groups to CIPP roles; a portal whose access is granted another way has
-        an empty table forever. That was this endpoint's first shape, and it answered an empty list
-        with no error and no warning - a reassignment picker that said 'No options' with nothing
-        anywhere saying why. So when the roster is empty, the partner tenant's own accounts are
-        listed instead, and the answer says that is what happened.
+        It is not always filled. It is written by hand from CIPP Users, and automatically by
+        Start-UserSyncTimer for deployments that map Entra groups to CIPP roles; a portal whose
+        access is granted only through the static web app's own invitations has an empty table
+        while people use it every day. That was this endpoint's first shape, and it answered an
+        empty list with no error and no warning - a reassignment picker that said 'No options'
+        with nothing anywhere saying why. So when the roster is empty, the partner tenant's own
+        accounts are listed instead, and the answer says that is what happened and where to fix it.
 
         Display names and the fallback roster both come from Graph on the partner tenant, read the
         way Start-UserSyncTimer reads it - app-only, no auth check - because that is the call this
@@ -86,7 +88,7 @@ function Get-PSITSocAnalysts {
                     displayName       = [string]$_.displayName
                 }
             })
-        $Warnings.Add("The portal's user list is empty - it is filled only when Entra groups are mapped to CIPP roles - so the $($Analysts.Count) accounts of the partner tenant are listed instead.")
+        $Warnings.Add("The portal's user list is empty, so the $($Analysts.Count) accounts of the partner tenant are listed instead. Add the analysts under CIPP > Advanced > Authentication > CIPP Users to assign dossiers from the portal's own roster.")
     }
 
     [PSCustomObject]@{

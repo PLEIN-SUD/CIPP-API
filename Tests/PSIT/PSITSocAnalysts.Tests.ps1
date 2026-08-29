@@ -106,9 +106,9 @@ Describe 'Get-PSITSocAnalysts with a portal roster' {
 }
 
 Describe 'Get-PSITSocAnalysts without a portal roster' {
-    # The state seen in production: allowedUsers is written only by the user-sync timer, and only
-    # for deployments that map Entra groups to CIPP roles. Everywhere else it is empty forever,
-    # and the picker offered nothing at all.
+    # The state seen in production: allowedUsers is what the CIPP Users page maintains, by hand or
+    # from the Entra-group sync. A portal whose access is granted only through the static web
+    # app invitations has an empty table while people use it daily, and the picker offered nothing.
     BeforeEach {
         Mock -CommandName Get-CippTable -MockWith { @{ Context = 'allowedUsers' } }
         Mock -CommandName Get-CIPPAzDataTableEntity -MockWith { @() }
