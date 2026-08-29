@@ -1,9 +1,13 @@
 # Pester tests for Get-PSITSocAnalysts.
 #
-# The reassignment picker's data: portal users from the allowedUsers table, display names joined
-# from Graph on the partner tenant. What is pinned here is the degradation contract - a Graph
-# outage yields email-only entries with a named warning, never an empty list, because handing a
-# case over is exactly the gesture an outage should not block.
+# The reassignment picker's data. Two sources in order of authority: the portal's own roster
+# (allowedUsers), and the partner tenant's accounts when that roster is empty - which it is on
+# every deployment that does not map Entra groups to CIPP roles, and where the first shape of
+# this endpoint answered 'No options' with nothing anywhere saying why.
+#
+# What is pinned: the picker is never empty when the tenant can answer, no way of coming back
+# without names is silent, and none of them empties the list - addresses are shown, because
+# handing a dossier over is exactly the gesture an outage should not block.
 
 BeforeAll {
     $RepoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSCommandPath))
@@ -13,12 +17,12 @@ BeforeAll {
 
     function Get-CippTable { param($tablename) }
     function Get-CIPPAzDataTableEntity { param($Context, $Filter) }
-    function New-GraphGetRequest { param($uri, $tenantid, $NoAuthCheck) }
+    function New-GraphGetRequest { param($uri, $tenantid, $NoAuthCheck, $AsApp) }
 
     . $FunctionPath
 }
 
-Describe 'Get-PSITSocAnalysts' {
+Describe 'Get-PSITSocAnalysts with a portal roster' {
     BeforeEach {
         Mock -CommandName Get-CippTable -MockWith { @{ Context = 'allowedUsers' } }
         Mock -CommandName Get-CIPPAzDataTableEntity -MockWith {
@@ -30,8 +34,8 @@ Describe 'Get-PSITSocAnalysts' {
         }
         Mock -CommandName New-GraphGetRequest -MockWith {
             @(
-                [PSCustomObject]@{ userPrincipalName = 'A.Analyste@partner.test'; displayName = 'Alice Analyste' }
-                [PSCustomObject]@{ userPrincipalName = 'b.analyste@partner.test'; displayName = 'Bob Analyste' }
+                [PSCustomObject]@{ userPrincipalName = 'A.Analyste@partner.test'; displayName = 'Alice Analyste'; accountEnabled = $true; userType = 'Member' }
+                [PSCustomObject]@{ userPrincipalName = 'b.analyste@partner.test'; displayName = 'Bob Analyste'; accountEnabled = $true; userType = 'Member' }
             )
         }
     }
@@ -55,32 +59,28 @@ Describe 'Get-PSITSocAnalysts' {
         $Result.Analysts[0].displayName | Should -Be 'Alice Analyste'
     }
 
-    It 'degrades to email-only entries with a named warning when Graph fails' {
+    It 'keeps the roster and reports the outage when Graph fails' {
         Mock -CommandName New-GraphGetRequest -MockWith { throw 'tenant did not answer' }
 
         $Result = Get-PSITSocAnalysts
 
         $Result.Analysts | Should -HaveCount 2
         $Result.Analysts[0].displayName | Should -Be ''
-        $Result.Warnings | Should -HaveCount 1
-        $Result.Warnings[0] | Should -Match 'Display names unavailable'
+        $Result.Warnings[0] | Should -Match 'did not answer'
     }
 
     It 'reports a Graph that answered nothing, instead of showing addresses in silence' {
-        # The state that cost an afternoon of guessing: no error, no warning, and no names. An
-        # outage was reported; an empty answer was not, and the screen looked identical.
         Mock -CommandName New-GraphGetRequest -MockWith { @() }
 
         $Result = Get-PSITSocAnalysts
 
         $Result.Analysts | Should -HaveCount 2
-        $Result.Warnings | Should -HaveCount 1
-        $Result.Warnings[0] | Should -Match 'without a single user'
+        $Result.Warnings[0] | Should -Match 'without a single account'
     }
 
     It 'reports two lists that exist and never meet, with both counts' {
         Mock -CommandName New-GraphGetRequest -MockWith {
-            @([PSCustomObject]@{ userPrincipalName = 'quelquun.dautre@partner.test'; displayName = 'Quelqu un' })
+            @([PSCustomObject]@{ userPrincipalName = 'quelquun.dautre@partner.test'; displayName = 'Quelqu un'; accountEnabled = $true; userType = 'Member' })
         }
 
         $Result = Get-PSITSocAnalysts
@@ -89,12 +89,10 @@ Describe 'Get-PSITSocAnalysts' {
     }
 
     It 'unwraps a response envelope rather than reporting an outage that did not happen' {
-        # If the helper ever hands back the envelope, every row fails the userPrincipalName
-        # filter and the join answers no names with nothing wrong on the wire.
         Mock -CommandName New-GraphGetRequest -MockWith {
             [PSCustomObject]@{
                 value = @(
-                    [PSCustomObject]@{ userPrincipalName = 'a.analyste@partner.test'; displayName = 'Alice Analyste' }
+                    [PSCustomObject]@{ userPrincipalName = 'a.analyste@partner.test'; displayName = 'Alice Analyste'; accountEnabled = $true; userType = 'Member' }
                 )
             }
         }
@@ -105,14 +103,49 @@ Describe 'Get-PSITSocAnalysts' {
             Should -Be 'Alice Analyste'
         $Result.Warnings | Should -HaveCount 0
     }
+}
 
-    It 'answers an empty table with an empty list and no Graph call' {
+Describe 'Get-PSITSocAnalysts without a portal roster' {
+    # The state seen in production: allowedUsers is written only by the user-sync timer, and only
+    # for deployments that map Entra groups to CIPP roles. Everywhere else it is empty forever,
+    # and the picker offered nothing at all.
+    BeforeEach {
+        Mock -CommandName Get-CippTable -MockWith { @{ Context = 'allowedUsers' } }
         Mock -CommandName Get-CIPPAzDataTableEntity -MockWith { @() }
+        Mock -CommandName New-GraphGetRequest -MockWith {
+            @(
+                [PSCustomObject]@{ userPrincipalName = 'a.analyste@partner.test'; displayName = 'Alice Analyste'; accountEnabled = $true; userType = 'Member' }
+                [PSCustomObject]@{ userPrincipalName = 'parti@partner.test'; displayName = 'Compte desactive'; accountEnabled = $false; userType = 'Member' }
+                [PSCustomObject]@{ userPrincipalName = 'invite@ailleurs.test'; displayName = 'Invite'; accountEnabled = $true; userType = 'Guest' }
+            )
+        }
+    }
+
+    It 'lists the tenant accounts rather than offering nothing' {
+        $Result = Get-PSITSocAnalysts
+
+        $Result.Analysts | Should -HaveCount 1
+        $Result.Analysts[0].displayName | Should -Be 'Alice Analyste'
+    }
+
+    It 'says the list is the directory and not the portal roster' {
+        $Result = Get-PSITSocAnalysts
+        $Result.Warnings[0] | Should -Match "portal's user list is empty"
+    }
+
+    It 'leaves out disabled accounts and guests, who cannot hold a dossier' {
+        $Result = Get-PSITSocAnalysts
+        $Result.Analysts.userPrincipalName | Should -Not -Contain 'parti@partner.test'
+        $Result.Analysts.userPrincipalName | Should -Not -Contain 'invite@ailleurs.test'
+    }
+
+    It 'answers an empty list, and says why, when neither source has anything' {
+        Mock -CommandName New-GraphGetRequest -MockWith { @() }
 
         $Result = Get-PSITSocAnalysts
 
         $Result.Analysts | Should -HaveCount 0
-        Should -Invoke New-GraphGetRequest -Times 0
+        $Result.Warnings | Should -HaveCount 2
     }
 }
 
@@ -120,9 +153,6 @@ Describe 'Invoke-PSITListSocAnalysts access declaration' {
     # The bug this pins: the endpoint declared Entrypoint alone. The front calls it without a
     # tenantFilter - it has no tenant to filter on - so the access check fell back to the partner
     # tenant, which no customer-scoped role may see, and the endpoint answered 403 to everyone.
-    # The queue then showed addresses where names belong and the reassignment picker stayed empty,
-    # with nothing in the code saying why. Every other PSIT endpoint takes a real tenantFilter;
-    # this is the only tenant-agnostic one, so it is the only one that needs the declaration.
     BeforeAll {
         $Root = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSCommandPath))
         $script:EndpointPath = Get-ChildItem -Path (Join-Path $Root 'Modules') -Recurse -Filter 'Invoke-PSITListSocAnalysts.ps1' -File |
