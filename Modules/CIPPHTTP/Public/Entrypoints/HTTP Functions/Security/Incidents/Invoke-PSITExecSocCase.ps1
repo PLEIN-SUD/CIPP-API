@@ -30,6 +30,19 @@ Function Invoke-PSITExecSocCase {
             })
     }
 
+    # A dossier is stored under its tenant, so an unknown one files it where nobody will look for
+    # it - and nothing downstream would have complained. A caller once sent the literal string
+    # 'tenant', because an unresolved column name falls back to itself, and the endpoint answered
+    # 200 with a case id under a client that does not exist. Names that resolve to nothing are
+    # refused here rather than written.
+    if ($TenantFilter -ne 'AllTenants' -and -not (Get-Tenants -TenantFilter $TenantFilter -IncludeErrors)) {
+        Write-LogMessage -headers $Request.Headers -API 'PSITExecSocCase' -tenant $TenantFilter -message "Refused a SOC case for an unknown tenant '$TenantFilter'." -sev Warn
+        return ([HttpResponseContext]@{
+                StatusCode = [HttpStatusCode]::BadRequest
+                Body       = @{ Results = "No managed tenant matches '$TenantFilter': the dossier was not created." }
+            })
+    }
+
     # The same header-to-name resolution as the BEC triage: a qualification without a name and a
     # timestamp is not an audit trail.
     $Analyst = Get-PSITBecAnalyst -Headers $Request.Headers

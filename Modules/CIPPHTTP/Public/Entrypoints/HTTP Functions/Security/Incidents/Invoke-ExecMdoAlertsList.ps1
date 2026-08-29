@@ -57,7 +57,14 @@ function Invoke-ExecMDOAlertsList {
                 }
                 $Alerts = $Rows | Select-CippAllowedTenantData -TenantProperty 'Tenant'
                 foreach ($alert in $Alerts) {
-                    ConvertFrom-Json -InputObject $alert.MdoAlert -Depth 10
+                    # PSIT-CUSTOM-BEGIN: the cached row knows which tenant the alert came from,
+                    # the serialised alert does not, and deserialising alone dropped it. A caller
+                    # adopting an alert from the AllTenants view then had no tenant to name.
+                    # The XDR list already emits Tenant on both paths; this aligns them.
+                    $AlertObject = ConvertFrom-Json -InputObject $alert.MdoAlert -Depth 10
+                    $AlertObject | Add-Member -NotePropertyName Tenant -NotePropertyValue ([string]$alert.Tenant) -Force
+                    $AlertObject
+                    # PSIT-CUSTOM-END
                 }
             }
         }
