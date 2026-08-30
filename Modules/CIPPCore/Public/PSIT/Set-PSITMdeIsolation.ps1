@@ -91,5 +91,21 @@ function Set-PSITMdeIsolation {
         Action   = $Action
         Machines = @($Onboarded | ForEach-Object { $_.computerDnsName } | Where-Object { $_ })
         Results  = @($Results)
+        # The machine as Defender described it before the action: isolating changes the state a
+        # later read would return, and a report has to describe the machine that was investigated
+        # rather than the one the isolation produced.
+        MachinesBefore = @($Onboarded | ForEach-Object {
+                [pscustomobject]@{
+                    id             = [string]$_.id
+                    computerDnsName = [string]$_.computerDnsName
+                    healthStatus   = [string]$_.healthStatus
+                    riskScore      = [string]$_.riskScore
+                    exposureLevel  = [string]$_.exposureLevel
+                    isolationState = [string]$_.isolationState
+                    lastSeen       = [string]$_.lastSeen
+                    osPlatform     = [string]$_.osPlatform
+                }
+            })
+        ActionedUtc = (Get-Date).ToUniversalTime().ToString('o')
     }
 }

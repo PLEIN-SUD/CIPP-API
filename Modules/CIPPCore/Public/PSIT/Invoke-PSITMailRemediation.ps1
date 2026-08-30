@@ -91,6 +91,24 @@ function Invoke-PSITMailRemediation {
         Action           = 'softDelete'
         Recipients       = @($Targets | ForEach-Object { [string]$_.Recipient })
         Submitted        = $true
+        # Read above, before the purge, and returned so the caller can file it: once the message
+        # is soft-deleted the same read answers about the state this action created, and a report
+        # written afterwards would say the phishing reached nobody.
+        EvidenceBefore   = [pscustomobject]@{
+            subject        = [string]$Evidence.Message.Subject
+            sender         = [string]$Evidence.Message.Sender
+            receivedUtc    = [string]$Evidence.Message.ReceivedUtc
+            recipients     = @($Evidence.Recipients | ForEach-Object {
+                    [pscustomobject]@{
+                        recipient      = [string]$_.Recipient
+                        deliveryAction = [string]$_.DeliveryAction
+                        stillDelivered = [bool]$_.StillDelivered
+                    }
+                })
+            recipientCount = [int]$Evidence.Metadata.RecipientCount
+            stillDelivered = [int]$Evidence.Metadata.StillDelivered
+            purgedUtc      = (Get-Date).ToUniversalTime().ToString('o')
+        }
         Results          = @([pscustomobject]@{
                 resultText = "Soft delete submitted for $($Targets.Count) copy/copies of the message. Confirm completion in the Defender portal."
                 state      = 'success'

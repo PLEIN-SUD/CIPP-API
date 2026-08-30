@@ -20,6 +20,7 @@ Function Invoke-PSITExecMailRemediate {
     $NetworkMessageId = Get-PSITSocRequestValue -Value $Request.Body.NetworkMessageId
     $Recipients = @(Get-PSITSocRequestValue -Value $Request.Body.Recipients | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     $ReceivedUtc = Get-PSITSocRequestValue -Value $Request.Body.ReceivedUtc
+    $CaseId = Get-PSITSocRequestValue -Value $Request.Body.CaseId
 
     if ([string]::IsNullOrWhiteSpace($TenantFilter) -or [string]::IsNullOrWhiteSpace($NetworkMessageId)) {
         return ([HttpResponseContext]@{
@@ -32,6 +33,21 @@ Function Invoke-PSITExecMailRemediate {
 
     try {
         $Remediation = Invoke-PSITMailRemediation -TenantFilter $TenantFilter -NetworkMessageId $NetworkMessageId -Recipients $Recipients -ReceivedUtc $ReceivedUtc -Analyst $Analyst
+
+        # Filed here rather than left to the caller: the message is deleted the moment this
+        # returns, and a second call the browser might fail to make would lose who received it.
+        if (-not [string]::IsNullOrWhiteSpace($CaseId) -and $null -ne $Remediation.EvidenceBefore) {
+            try {
+                $null = Set-PSITSocCase -TenantFilter $TenantFilter -CaseId $CaseId -Analyst $Analyst -Evidence @{
+                    mail = $Remediation.EvidenceBefore
+                }
+            } catch {
+                # The purge succeeded; failing to file its evidence is worth a log and not a
+                # failed response, which would read as "nothing was purged".
+                Write-LogMessage -headers $Request.Headers -API 'PSITExecMailRemediate' -tenant $TenantFilter -message "Message purged but its evidence could not be filed on case ${CaseId}: $($_.Exception.Message)" -sev Warn
+            }
+        }
+
         return ([HttpResponseContext]@{
                 StatusCode = [HttpStatusCode]::OK
                 Body       = @{

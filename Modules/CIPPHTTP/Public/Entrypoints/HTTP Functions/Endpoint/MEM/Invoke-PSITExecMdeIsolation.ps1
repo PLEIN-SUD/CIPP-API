@@ -20,6 +20,7 @@ Function Invoke-PSITExecMdeIsolation {
     $AzureADDeviceId = Get-PSITSocRequestValue -Value $Request.Body.AzureADDeviceId
     $Comment = Get-PSITSocRequestValue -Value $Request.Body.Comment
     $Release = (Get-PSITSocRequestValue -Value $Request.Body.Release) -eq $true
+    $CaseId = Get-PSITSocRequestValue -Value $Request.Body.CaseId
 
     if ([string]::IsNullOrWhiteSpace($TenantFilter) -or [string]::IsNullOrWhiteSpace($AzureADDeviceId)) {
         return ([HttpResponseContext]@{
@@ -39,6 +40,21 @@ Function Invoke-PSITExecMdeIsolation {
         }
         if ($Release) { $Parameters.Release = $true }
         $Isolation = Set-PSITMdeIsolation @Parameters
+
+        # Only on the way in. Releasing restores the state the isolation changed, so it has
+        # nothing to preserve, and filing it would overwrite the picture taken before the cut.
+        if (-not $Release -and -not [string]::IsNullOrWhiteSpace($CaseId) -and @($Isolation.MachinesBefore).Count -gt 0) {
+            try {
+                $null = Set-PSITSocCase -TenantFilter $TenantFilter -CaseId $CaseId -Analyst $Analyst -Evidence @{
+                    device = [pscustomobject]@{
+                        machines    = @($Isolation.MachinesBefore)
+                        isolatedUtc = $Isolation.ActionedUtc
+                    }
+                }
+            } catch {
+                Write-LogMessage -headers $Request.Headers -API 'PSITExecMdeIsolation' -tenant $TenantFilter -message "Device isolated but its evidence could not be filed on case ${CaseId}: $($_.Exception.Message)" -sev Warn
+            }
+        }
 
         return ([HttpResponseContext]@{
                 StatusCode = [HttpStatusCode]::OK
