@@ -19,6 +19,7 @@ Function Invoke-PSITExecRevokeAppConsent {
     $TenantFilter = Get-PSITSocRequestValue -Value $Request.Body.tenantFilter
     $ServicePrincipalId = Get-PSITSocRequestValue -Value $Request.Body.ServicePrincipalId
     $AppId = Get-PSITSocRequestValue -Value $Request.Body.AppId
+    $CaseId = Get-PSITSocRequestValue -Value $Request.Body.CaseId
 
     if ([string]::IsNullOrWhiteSpace($TenantFilter)) {
         return ([HttpResponseContext]@{
@@ -37,6 +38,29 @@ Function Invoke-PSITExecRevokeAppConsent {
 
     try {
         $Revocation = Revoke-PSITAppConsent -TenantFilter $TenantFilter -ServicePrincipalId $ServicePrincipalId -AppId $AppId -Analyst $Analyst
+
+        # Written here rather than left to the caller: the grants are gone the moment this returns,
+        # and a second call the browser might fail to make would lose them for good. A dossier is
+        # named only when the revocation was run from one.
+        if (-not [string]::IsNullOrWhiteSpace($CaseId)) {
+            try {
+                $null = Set-PSITSocCase -TenantFilter $TenantFilter -CaseId $CaseId -Analyst $Analyst -Evidence @{
+                    app = [pscustomobject]@{
+                        displayName     = $Revocation.DisplayName
+                        appId           = $Revocation.AppId
+                        publisherName   = $Revocation.PublisherName
+                        createdDateTime = $Revocation.CreatedDateTime
+                        removedGrants   = @($Revocation.RemovedGrants)
+                        revokedUtc      = $Revocation.RevokedUtc
+                    }
+                }
+            } catch {
+                # The revocation itself succeeded; failing to file its evidence is worth a log and
+                # not a failed response, which would read as "nothing was revoked".
+                Write-LogMessage -headers $Request.Headers -API 'PSITExecRevokeAppConsent' -tenant $TenantFilter -message "Consent revoked but its evidence could not be filed on case ${CaseId}: $($_.Exception.Message)" -sev Warn
+            }
+        }
+
         return ([HttpResponseContext]@{
                 StatusCode = [HttpStatusCode]::OK
                 Body       = @{

@@ -102,6 +102,7 @@ function ConvertFrom-PSITSocCaseRow {
         AssignedTo    = [string]$Row.AssignedTo
         Title         = [string]$Row.Title
         Entities      = & $ParseJson $Row.Entities ([pscustomobject]@{})
+        Evidence      = & $ParseJson $Row.Evidence ([pscustomobject]@{})
         ExternalRef   = [string]$Row.ExternalRef
         TicketRef     = [string]$Row.TicketRef
         TicketUrl     = [string]$Row.TicketUrl

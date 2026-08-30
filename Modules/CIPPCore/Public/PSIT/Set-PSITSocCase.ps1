@@ -76,6 +76,11 @@ function Set-PSITSocCase {
         # the properties present.
         $Entities,
 
+        # What was true before an action changed it. Written by the actions that destroy their own
+        # evidence - revoking a consent deletes the grants that justified it - so a report produced
+        # afterwards describes the investigation rather than the state the remediation left behind.
+        $Evidence,
+
         [string]$ExternalRef,
 
         # The MSP's own case reference, free text, same rationale as AutotaskTicket on the BEC
@@ -285,6 +290,22 @@ function Set-PSITSocCase {
     } else {
         [string]$Existing.Entities
     }
+    # Merged by key rather than replaced: two remediations on one dossier each keep their own
+    # snapshot, and neither erases the other.
+    $EvidenceJson = if ($null -ne $Evidence) {
+        $Merged = @{}
+        if (-not [string]::IsNullOrWhiteSpace($Existing.Evidence)) {
+            try {
+                ($Existing.Evidence | ConvertFrom-Json).PSObject.Properties | ForEach-Object { $Merged[$_.Name] = $_.Value }
+            } catch {
+                Write-Information "SOC case ${CaseId}: existing evidence could not be parsed and is being replaced: $($_.Exception.Message)"
+            }
+        }
+        foreach ($Property in ([pscustomobject]$Evidence).PSObject.Properties) { $Merged[$Property.Name] = $Property.Value }
+        [string]($Merged | ConvertTo-Json -Depth 8 -Compress)
+    } else {
+        [string]$Existing.Evidence
+    }
 
     $Entity = @{
         PartitionKey  = $TenantFilter
@@ -297,6 +318,7 @@ function Set-PSITSocCase {
         Severity      = & $Keep $Severity $Existing.Severity
         Status        = [string]$NewStatus
         Entities      = $EntitiesJson
+        Evidence      = $EvidenceJson
         ExternalRef   = & $Keep $ExternalRef $Existing.ExternalRef
         TicketRef     = & $Keep $TicketRef $Existing.TicketRef
         TicketUrl     = & $Keep $TicketUrl $Existing.TicketUrl

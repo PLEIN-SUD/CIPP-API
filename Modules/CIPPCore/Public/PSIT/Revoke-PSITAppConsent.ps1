@@ -66,10 +66,20 @@ function Revoke-PSITAppConsent {
     }
 
     # Step 2: delegated grants.
+    $Removed = [System.Collections.Generic.List[object]]::new()
     try {
         $Grants = @(New-GraphGetRequest -uri "https://graph.microsoft.com/beta/oauth2PermissionGrants?`$filter=clientId eq '$SpId'" -tenantid $TenantFilter)
         foreach ($Grant in $Grants) {
             if (-not $Grant.id) { continue }
+            # Kept before it is deleted. These grants are the evidence that justified the
+            # revocation, and a report written afterwards read a tenant where they no longer
+            # exist: it showed an application with no consent and no permission, which is the
+            # state the revocation created, not the state that was investigated.
+            $Removed.Add([pscustomobject]@{
+                    consentType = [string]$Grant.consentType
+                    principalId = [string]$Grant.principalId
+                    scope       = [string]$Grant.scope
+                })
             $null = New-GraphPOSTRequest -uri "https://graph.microsoft.com/beta/oauth2PermissionGrants/$($Grant.id)" -type DELETE -tenantid $TenantFilter -body ''
         }
         & $Report "Removed $(@($Grants | Where-Object { $_.id }).Count) delegated grant(s) of $Name" 'success'
@@ -95,6 +105,10 @@ function Revoke-PSITAppConsent {
         ServicePrincipalId = $SpId
         AppId              = [string]$ServicePrincipal.appId
         DisplayName        = [string]$Name
+        PublisherName      = [string]$ServicePrincipal.publisherName
+        CreatedDateTime    = [string]$ServicePrincipal.createdDateTime
+        RemovedGrants      = @($Removed)
+        RevokedUtc         = (Get-Date).ToUniversalTime().ToString('o')
         Results            = @($Results)
     }
 }
