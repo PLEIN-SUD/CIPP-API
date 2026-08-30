@@ -68,6 +68,22 @@ Describe 'Resolve-PSITSocAlertType' {
         (& $script:Resolve "An active 'Wacatac' malware was blocked").TypeId | Should -Be 12
     }
 
+    It 'opens a dossier for a mass download inside a Microsoft tenant' {
+        # The exclusion was written for Google Workspace and its platform group was optional, so
+        # it matched every mass download - including the ones on tenants this portal exists to
+        # investigate. Out-of-scope rules run before every other pattern, so nothing downstream
+        # could catch them, and the refusal was logged with a reason that was false for them.
+        $Result = & $script:Resolve '[SOC x CLIENT_A] - Téléchargement massif de fichiers - utilisateur@client-a.test'
+        $Result.TypeId | Should -Be 20
+        $Result.OutOfScope | Should -BeFalse
+    }
+
+    It 'still refuses the Google Workspace one, which is what the rule was for' {
+        $Result = & $script:Resolve '[SOC x CLIENT_A] - Téléchargement massif de fichiers Google Workspace - utilisateur@client-a.test'
+        $Result.OutOfScope | Should -BeTrue
+        $Result.LabelId | Should -Be 'DATA_MASS_DOWNLOAD_GOOGLE'
+    }
+
     It 'opens a case on the catch-all type rather than dropping an unknown subject' {
         # The emitter adds rules without telling anyone. An unrecognised subject is a taxonomy to
         # extend, and dropping it would make that invisible.
@@ -90,7 +106,7 @@ Describe 'Resolve-PSITSocAlertType' {
         $Result = & $script:Resolve '[SOC x CLIENT_A] - Téléchargement massif de fichiers Google Workspace'
         $Result.OutOfScope | Should -BeTrue
         $Result.Status | Should -Be 'OUT_OF_SCOPE'
-        $Result.LabelId | Should -Be 'DATA_MASS_DOWNLOAD'
+        $Result.LabelId | Should -Be 'DATA_MASS_DOWNLOAD_GOOGLE'
     }
 
     It 'marks the correlation rule as watched, since no message carrying it has been seen' {

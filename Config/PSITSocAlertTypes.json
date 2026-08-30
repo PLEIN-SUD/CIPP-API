@@ -70,6 +70,13 @@
       "Pattern": "(?:Alerte\\s+)?mails?\\s+de\\s+phishing\\s+non\\s+bloqués?"
     },
     {
+      "LabelId": "DATA_MASS_DOWNLOAD",
+      "TypeId": 20,
+      "DetectionSource": "unknown",
+      "Status": "ACTIVE",
+      "Pattern": "Téléchargement\\s+massif\\s+de\\s+fichiers(?:\\s+(?<platform>SharePoint|OneDrive))?"
+    },
+    {
       "LabelId": "APP_ACTIVITY",
       "TypeId": 19,
       "DetectionSource": "entra",
@@ -156,9 +163,9 @@
   ],
   "outOfScope": [
     {
-      "LabelId": "DATA_MASS_DOWNLOAD",
+      "LabelId": "DATA_MASS_DOWNLOAD_GOOGLE",
       "Reason": "Google Workspace: this portal covers Microsoft tenants only.",
-      "Pattern": "Téléchargement\\s+massif\\s+de\\s+fichiers(?:\\s+(?<platform>Google\\s+Workspace|SharePoint|OneDrive))?"
+      "Pattern": "Téléchargement\\s+massif\\s+de\\s+fichiers\\s+Google\\s+Workspace"
     },
     {
       "LabelId": "S1_ACTIVE_THREAT",
