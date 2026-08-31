@@ -25,6 +25,7 @@ BeforeAll {
     function Get-PSITSocRequestValue { param($Value) return $Value }
     function Get-PSITBecAnalyst { param($Headers) return 'analyste@partner.test' }
     function Get-Tenants { param($TenantFilter, [switch]$IncludeErrors) }
+    function Get-PSITSocCase { param($TenantFilter, $CaseId, $Status, $Source, $ExternalRef) }
     function Write-LogMessage { param($headers, $API, $tenant, $message, $sev, $LogData) }
     function Get-CippException { param($Exception) }
     function Set-PSITSocCase {
@@ -79,5 +80,44 @@ Describe 'Invoke-PSITExecSocCase tenant guard' {
         $Result = Invoke-PSITExecSocCase -Request (New-CaseRequest -Body @{ Title = 'Test' }) -TriggerMetadata $null
         $Result.StatusCode | Should -Be ([HttpStatusCode]::BadRequest)
         $Result.Body.Results | Should -Match 'tenantFilter is required'
+    }
+}
+
+Describe 'Invoke-PSITExecSocCase take-ownership lock' {
+    BeforeEach {
+        Mock -CommandName Write-LogMessage -MockWith { }
+        Mock -CommandName Set-PSITSocCase -MockWith {
+            [PSCustomObject]@{ CaseId = 'PSIT-SOC-1'; Tenant = 'contoso.test'; AssignedTo = 'n1@partner.test' }
+        }
+        Mock -CommandName Get-Tenants -MockWith {
+            @([PSCustomObject]@{ defaultDomainName = 'contoso.test' })
+        }
+    }
+
+    It 'refuses the second click: the case names who already holds it' {
+        Mock -CommandName Get-PSITSocCase -MockWith {
+            [PSCustomObject]@{ CaseId = 'PSIT-SOC-1'; AssignedTo = 'collegue@partner.test' }
+        }
+
+        $Response = Invoke-PSITExecSocCase -Request (New-CaseRequest -Body @{ tenantFilter = 'contoso.test'; CaseId = 'PSIT-SOC-1'; TakeOwnership = $true }) -TriggerMetadata $null
+
+        $Response.StatusCode | Should -Be ([HttpStatusCode]::Conflict)
+        $Response.Body.Results | Should -Match 'collegue@partner.test'
+        Should -Invoke Set-PSITSocCase -Times 0
+    }
+
+    It 'lets an unassigned case be taken, and re-taking your own is idempotent' {
+        Mock -CommandName Get-PSITSocCase -MockWith {
+            [PSCustomObject]@{ CaseId = 'PSIT-SOC-1'; AssignedTo = '' }
+        }
+        $Free = Invoke-PSITExecSocCase -Request (New-CaseRequest -Body @{ tenantFilter = 'contoso.test'; CaseId = 'PSIT-SOC-1'; TakeOwnership = $true }) -TriggerMetadata $null
+        $Free.StatusCode | Should -Be ([HttpStatusCode]::OK)
+
+        Mock -CommandName Get-PSITSocCase -MockWith {
+            [PSCustomObject]@{ CaseId = 'PSIT-SOC-1'; AssignedTo = 'analyste@partner.test' }
+        }
+        # New-CaseRequest's harness analyst is analyste@partner.test.
+        $Own = Invoke-PSITExecSocCase -Request (New-CaseRequest -Body @{ tenantFilter = 'contoso.test'; CaseId = 'PSIT-SOC-1'; TakeOwnership = $true }) -TriggerMetadata $null
+        $Own.StatusCode | Should -Be ([HttpStatusCode]::OK)
     }
 }

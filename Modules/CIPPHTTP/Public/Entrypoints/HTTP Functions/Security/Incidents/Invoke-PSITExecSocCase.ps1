@@ -61,6 +61,21 @@ Function Invoke-PSITExecSocCase {
     # claiming work is not the same gesture as handing it to someone else, and only the second
     # should be able to write another person's name onto a case.
     if ($Request.Body.TakeOwnership -eq $true) {
+        # Two analysts clicking 'Prendre en charge' seconds apart used to both win, last write
+        # silently erasing the first: the second click now sees who holds the case instead.
+        # (A read-then-write window of milliseconds remains; the failure mode being guarded is
+        # two humans, seconds apart.)
+        $CurrentCaseId = Get-PSITSocRequestValue -Value $Request.Body.CaseId
+        if (-not [string]::IsNullOrWhiteSpace($CurrentCaseId)) {
+            $Current = @(Get-PSITSocCase -TenantFilter $TenantFilter -CaseId $CurrentCaseId) | Select-Object -First 1
+            $Holder = [string]$Current.AssignedTo
+            if (-not [string]::IsNullOrWhiteSpace($Holder) -and $Holder -ne $Analyst) {
+                return ([HttpResponseContext]@{
+                        StatusCode = [HttpStatusCode]::Conflict
+                        Body       = @{ Results = "Ce dossier vient d'être pris par $Holder : rafraîchissez la file. Pour le récupérer, passez par « Réattribuer »." }
+                    })
+            }
+        }
         $Parameters.AssignedTo = $Analyst
     } elseif ($null -ne $Request.Body.AssignedTo) {
         # Reassignment, including release: an empty string is a value here, not a missing one.
