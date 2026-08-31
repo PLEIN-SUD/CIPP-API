@@ -105,6 +105,26 @@ Function Invoke-PSITExecDownloadAudit {
         }
 
         $Result = Get-PSITDownloadAudit -TenantFilter $TenantFilter -SearchId $SearchId
+
+        # First successful read: the summary is captured on the dossier. The search and its
+        # records expire with the tenant's audit journal, and the investigation report quotes
+        # these numbers - they must outlive their source. A capture that fails logs and moves on:
+        # the analyst still gets the live answer.
+        if (-not $Result.Running -and $null -ne $Result.Summary -and $null -eq $Filed.summary) {
+            try {
+                $Captured = [pscustomobject]@{}
+                foreach ($Property in ([pscustomobject]$Filed).PSObject.Properties) {
+                    $Captured | Add-Member -NotePropertyName $Property.Name -NotePropertyValue $Property.Value
+                }
+                $Captured | Add-Member -NotePropertyName 'summary' -NotePropertyValue $Result.Summary -Force
+                $Captured | Add-Member -NotePropertyName 'capturedUtc' -NotePropertyValue ((Get-Date).ToUniversalTime().ToString('o')) -Force
+                $null = Set-PSITSocCase -TenantFilter $TenantFilter -CaseId $CaseId -Analyst (Get-PSITBecAnalyst -Headers $Request.Headers) -Evidence @{ download = $Captured }
+                $Filed = $Captured
+            } catch {
+                Write-LogMessage -headers $Request.Headers -API $APIName -tenant $TenantFilter -message "Download audit summary could not be filed on case $($CaseId): $($_.Exception.Message)" -sev Warn
+            }
+        }
+
         # The window travels with the answer: a file count means nothing without the hours it
         # counts over, and the report quotes both.
         $Result | Add-Member -NotePropertyName 'Started' -NotePropertyValue $true -Force

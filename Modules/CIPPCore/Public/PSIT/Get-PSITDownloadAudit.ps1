@@ -80,7 +80,11 @@ function Get-PSITDownloadAudit {
     }
 
     $Extensions = @{}
+    $Operations = @{}
     foreach ($File in $Files) {
+        if (-not [string]::IsNullOrWhiteSpace($File.Operation)) {
+            $Operations[$File.Operation] = ([int]$Operations[$File.Operation]) + 1
+        }
         $Extension = if ($File.Name -match '\.([A-Za-z0-9]{1,8})$') { $Matches[1].ToLowerInvariant() } else { 'sans extension' }
         $Extensions[$Extension] = ([int]$Extensions[$Extension]) + 1
     }
@@ -107,6 +111,11 @@ function Get-PSITDownloadAudit {
             Addresses    = @($Addresses | Select-Object -First 10)
             AddressCount = $Addresses.Count
             Agents       = @($Agents | Select-Object -First 5)
+            # Read one thing, downloaded another: the report leans on this split, because a page
+            # of FileAccessed records is not a data exfiltration.
+            Operations   = @($Operations.GetEnumerator() | Sort-Object -Property Value -Descending | ForEach-Object {
+                    [pscustomobject]@{ Operation = $_.Key; Count = $_.Value }
+                })
         }
         Warnings = @($Warnings)
     }

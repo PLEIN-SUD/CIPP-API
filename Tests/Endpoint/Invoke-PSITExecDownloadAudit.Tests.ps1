@@ -128,6 +128,48 @@ Describe 'Invoke-PSITExecDownloadAudit' {
         }
     }
 
+    It 'captures the summary on the dossier at the first finished read' {
+        # The search expires with the tenant's journal; the report quotes these numbers, so they
+        # must outlive their source.
+        Mock -CommandName Get-PSITSocCase -MockWith {
+            [PSCustomObject]@{
+                CaseId   = 'PSIT-SOC-1'
+                Tenant   = 'client.test'
+                Entities = [PSCustomObject]@{ upn = 'y.exemple@client.test' }
+                Evidence = [PSCustomObject]@{ download = [PSCustomObject]@{ searchId = 'search-old'; user = 'y.exemple@client.test' } }
+            }
+        }
+        Mock -CommandName Get-PSITDownloadAudit -MockWith {
+            [PSCustomObject]@{ SearchId = 'search-old'; Status = 'succeeded'; Running = $false; Records = @(); Summary = [PSCustomObject]@{ FileCount = 3 }; Warnings = @() }
+        }
+
+        $null = Invoke-PSITExecDownloadAudit -Request (New-AuditRequest -Body @{ tenantFilter = 'client.test'; CaseId = 'PSIT-SOC-1' }) -TriggerMetadata $null
+
+        Should -Invoke Set-PSITSocCase -Times 1 -ParameterFilter {
+            $Evidence.download.summary.FileCount -eq 3 -and $Evidence.download.searchId -eq 'search-old'
+        }
+    }
+
+    It 'does not re-capture a summary the dossier already holds' {
+        # The first capture describes what the investigation saw; a later, emptier read of an
+        # expiring search must never overwrite it.
+        Mock -CommandName Get-PSITSocCase -MockWith {
+            [PSCustomObject]@{
+                CaseId   = 'PSIT-SOC-1'
+                Tenant   = 'client.test'
+                Entities = [PSCustomObject]@{ upn = 'y.exemple@client.test' }
+                Evidence = [PSCustomObject]@{ download = [PSCustomObject]@{ searchId = 'search-old'; summary = [PSCustomObject]@{ FileCount = 370 } } }
+            }
+        }
+        Mock -CommandName Get-PSITDownloadAudit -MockWith {
+            [PSCustomObject]@{ SearchId = 'search-old'; Status = 'succeeded'; Running = $false; Records = @(); Summary = [PSCustomObject]@{ FileCount = 0 }; Warnings = @() }
+        }
+
+        $null = Invoke-PSITExecDownloadAudit -Request (New-AuditRequest -Body @{ tenantFilter = 'client.test'; CaseId = 'PSIT-SOC-1' }) -TriggerMetadata $null
+
+        Should -Invoke Set-PSITSocCase -Times 0
+    }
+
     It 'refuses a dossier that names nobody, rather than searching the whole tenant' {
         Mock -CommandName Get-PSITSocCase -MockWith {
             [PSCustomObject]@{ CaseId = 'PSIT-SOC-1'; Tenant = 'client.test'; Entities = [PSCustomObject]@{}; Evidence = [PSCustomObject]@{} }

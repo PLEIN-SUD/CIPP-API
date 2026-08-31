@@ -154,6 +154,9 @@ Describe 'Get-PSITDownloadAudit' {
         $Result.Summary.LastUtc | Should -Be '2026-08-28T15:26:00Z'
         $Result.Summary.AddressCount | Should -Be 2
         $Result.Summary.Agents | Should -HaveCount 2
+        # Accessed is not downloaded: the report leans on this split.
+        ($Result.Summary.Operations | Where-Object { $_.Operation -eq 'FileDownloaded' }).Count | Should -Be 2
+        ($Result.Summary.Operations | Where-Object { $_.Operation -eq 'FileSyncDownloadedFull' }).Count | Should -Be 1
     }
 
     It 'names each file the way a human would, not by its site path' {
