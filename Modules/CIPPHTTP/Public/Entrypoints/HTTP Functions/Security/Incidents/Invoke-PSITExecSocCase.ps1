@@ -53,7 +53,7 @@ Function Invoke-PSITExecSocCase {
     }
     # Scalars pass through when present; Set-PSITSocCase owns the validation so the rules live
     # in one place whatever the caller.
-    foreach ($Name in @('CaseId', 'Title', 'Source', 'Severity', 'SeverityTag', 'Status', 'ExternalRef', 'TicketRef', 'TicketUrl', 'Verdict', 'Justification')) {
+    foreach ($Name in @('CaseId', 'Title', 'Source', 'Severity', 'SeverityTag', 'Status', 'ExternalRef', 'TicketRef', 'TicketUrl', 'Verdict', 'Justification', 'RootCause')) {
         $Value = Get-PSITSocRequestValue -Value $Request.Body.$Name
         if (-not [string]::IsNullOrWhiteSpace($Value)) { $Parameters.$Name = [string]$Value }
     }
@@ -72,6 +72,8 @@ Function Invoke-PSITExecSocCase {
         $Parameters.TypeId = [int]$TypeId
     }
     if ($null -ne $Request.Body.Entities) { $Parameters.Entities = $Request.Body.Entities }
+    # An array parameter: an empty array is a value (clearing the techniques), absent is absent.
+    if ($null -ne $Request.Body.AttackTechniques) { $Parameters.AttackTechniques = @($Request.Body.AttackTechniques | ForEach-Object { [string](Get-PSITSocRequestValue -Value $_) } | Where-Object { $_ }) }
     if ($null -ne $Request.Body.GuideProgress) { $Parameters.GuideProgress = @($Request.Body.GuideProgress) }
     if ($null -ne $Request.Body.LogAction) { $Parameters.LogAction = $Request.Body.LogAction }
 

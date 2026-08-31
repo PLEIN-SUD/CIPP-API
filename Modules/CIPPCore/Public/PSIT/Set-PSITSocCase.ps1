@@ -62,7 +62,7 @@ function Set-PSITSocCase {
         [ValidateSet('P1', 'P2', 'P3', 'P4')]
         [string]$Severity,
 
-        [ValidateSet('new', 'investigating', 'qualified-fp', 'qualified-tp', 'contained', 'closed')]
+        [ValidateSet('new', 'investigating', 'qualified-fp', 'qualified-tp', 'qualified-btp', 'contained', 'closed')]
         [string]$Status,
 
         # Who is on it. Distinct from UpdatedBy, which is whoever last touched the record: a second
@@ -96,12 +96,24 @@ function Set-PSITSocCase {
         # and neither is derived from the other.
         [string]$SeverityTag,
 
-        # The qualification. 'undetermined' is a real answer: the client is unreachable, the
-        # question stands, and the case must be able to say so honestly.
-        [ValidateSet('false-positive', 'true-positive', 'undetermined')]
+        # The qualification, on the four-outcome taxonomy. 'benign-true-positive' is the MSP's
+        # most frequent real case after the true FP: the detection was right, the behaviour is
+        # real, and there is no compromise (shadow IT, a knowingly deployed app). Forcing it into
+        # 'false-positive' taught the external SOC to stop flagging the pattern, and forcing it
+        # into 'true-positive' produced client documents asserting a compromise. 'undetermined'
+        # is a real answer too: the question stands, and the case must be able to say so.
+        [ValidateSet('false-positive', 'true-positive', 'benign-true-positive', 'undetermined')]
         [string]$Verdict,
 
         [string]$Justification,
+
+        # MITRE ATT&CK technique ids observed on this case (e.g. 'T1078'). Defaulted per alert
+        # type by the frontend catalogue, correctable per case; quoted by the reports.
+        [string[]]$AttackTechniques,
+
+        # Why it happened, not what happened: phishing, password reuse, legacy protocol, shadow
+        # IT... This is what feeds the recommendations instead of leaving them generic.
+        [string]$RootCause,
 
         # Array of { StepId, State (done|skipped|pending) }: progress on the investigation guide
         # of the case's type. Merged per StepId.
@@ -168,6 +180,20 @@ function Set-PSITSocCase {
             Write-Information "SOC case ${CaseId}: existing qualification could not be parsed and is being replaced: $($_.Exception.Message)"
         }
     }
+    $Existing_Qualification_Attack = @($Qualification.AttackTechniques | Where-Object { $_ })
+    $Existing_Qualification_RootCause = [string]$Qualification.RootCause
+
+    # The analysis fields can be written before any verdict exists: the Analyse tab is step 5,
+    # the verdict is step 7. A bare qualification object carries them until the verdict arrives.
+    if (-not $Verdict -and ($PSBoundParameters.ContainsKey('AttackTechniques') -or $PSBoundParameters.ContainsKey('RootCause'))) {
+        if (-not $Qualification) { $Qualification = [pscustomobject]@{} }
+        $Merged = [ordered]@{}
+        foreach ($Property in $Qualification.PSObject.Properties) { $Merged[$Property.Name] = $Property.Value }
+        if ($PSBoundParameters.ContainsKey('AttackTechniques')) { $Merged['AttackTechniques'] = @($AttackTechniques) }
+        if ($PSBoundParameters.ContainsKey('RootCause')) { $Merged['RootCause'] = [string]$RootCause }
+        $Qualification = [pscustomobject]$Merged
+    }
+
     if ($Verdict) {
         $History = [System.Collections.Generic.List[object]]::new()
         if ($Qualification) {
@@ -187,6 +213,10 @@ function Set-PSITSocCase {
             Analyst          = $Analyst
             DecidedUtc       = $Now
             PreviousVerdicts = @($History)
+            # Carried over unless this very call also sets them: the analysis (techniques, root
+            # cause) is usually written before the verdict, and a verdict must not erase it.
+            AttackTechniques = if ($PSBoundParameters.ContainsKey('AttackTechniques')) { @($AttackTechniques) } else { @($Existing_Qualification_Attack) }
+            RootCause        = if ($PSBoundParameters.ContainsKey('RootCause')) { [string]$RootCause } else { [string]$Existing_Qualification_RootCause }
         }
         $SystemLog.Add([pscustomobject]@{ Utc = $Now; Analyst = $Analyst; Action = 'qualified'; Detail = $Verdict })
 
@@ -196,6 +226,7 @@ function Set-PSITSocCase {
             $EffectiveStatus = switch ($Verdict) {
                 'false-positive' { 'qualified-fp' }
                 'true-positive' { 'qualified-tp' }
+                'benign-true-positive' { 'qualified-btp' }
                 default { $null }
             }
         }
@@ -206,6 +237,16 @@ function Set-PSITSocCase {
     $NewStatus = if ($EffectiveStatus) { $EffectiveStatus } elseif ($Existing) { $PreviousStatus } else { 'new' }
     if ($EffectiveStatus -and $EffectiveStatus -ne $PreviousStatus) {
         $SystemLog.Add([pscustomobject]@{ Utc = $Now; Analyst = $Analyst; Action = 'status'; Detail = $NewStatus })
+    }
+    # Closing on 'undetermined' is allowed - sometimes the data will never come - but never
+    # silently: unclear is a holding state, and a case that leaves it unresolved must say why.
+    if ($NewStatus -eq 'closed' -and $PreviousStatus -ne 'closed') {
+        $ClosingVerdict = if ($Verdict) { $Verdict } else { [string]$Qualification.Verdict }
+        $HasJustification = -not [string]::IsNullOrWhiteSpace([string]$Justification) -or
+            -not [string]::IsNullOrWhiteSpace([string]$Qualification.Justification)
+        if ($ClosingVerdict -eq 'undetermined' -and -not $HasJustification) {
+            throw "Ce dossier est qualifié indéterminé : sa clôture exige une justification (ce qui a été tenté, ce qui manque)."
+        }
     }
     $ClosedUtc = [string]$Existing.ClosedUtc
     $ClosedBy = [string]$Existing.ClosedBy

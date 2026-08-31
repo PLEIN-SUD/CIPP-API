@@ -129,6 +129,75 @@ Describe 'Set-PSITSocCase, qualification' {
     }
 }
 
+Describe 'Set-PSITSocCase, four-outcome taxonomy' {
+    BeforeEach {
+        Reset-Store
+        Enable-StoreMocks
+        Mock -CommandName Write-LogMessage -MockWith { }
+        $script:Case = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -Source 'extsoc' -TypeId 2 -Title 'Voyage impossible p.martin'
+    }
+
+    It 'a benign true positive is a real verdict, and derives its own status' {
+        # The detection was right, the behaviour is real, there is no compromise: forcing this
+        # into FP taught the external SOC to stop flagging the pattern.
+        $Case = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -CaseId $script:Case.CaseId -Verdict 'benign-true-positive' -Justification 'VPN personnel du titulaire, comportement traité'
+
+        $Case.Qualification.Verdict | Should -Be 'benign-true-positive'
+        $Case.Status | Should -Be 'qualified-btp'
+    }
+
+    It 'the analysis fields live on the qualification and survive a later verdict' {
+        # Analysis (step 5) is written before the verdict (step 7): the verdict must carry it,
+        # not erase it.
+        $null = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -CaseId $script:Case.CaseId -AttackTechniques @('T1078', 'T1621') -RootCause 'shadow-it'
+        $Case = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -CaseId $script:Case.CaseId -Verdict 'benign-true-positive' -Justification 'VPN'
+
+        @($Case.Qualification.AttackTechniques) | Should -Be @('T1078', 'T1621')
+        $Case.Qualification.RootCause | Should -Be 'shadow-it'
+    }
+
+    It 'writing the analysis without a verdict does not invent one' {
+        $Case = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -CaseId $script:Case.CaseId -AttackTechniques @('T1530')
+
+        $Case.Qualification.Verdict | Should -BeNullOrEmpty
+        $Case.Status | Should -Be 'new'
+    }
+
+    It 'closing an undetermined case demands a justification: unclear is a holding state' {
+        $null = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -CaseId $script:Case.CaseId -Verdict 'undetermined'
+
+        { Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -CaseId $script:Case.CaseId -Status 'closed' } |
+            Should -Throw '*justification*'
+    }
+
+    It 'closes an undetermined case whose qualification already says why' {
+        $null = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -CaseId $script:Case.CaseId -Verdict 'undetermined' -Justification 'titulaire injoignable après trois relances'
+
+        $Case = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -CaseId $script:Case.CaseId -Status 'closed'
+        $Case.Status | Should -Be 'closed'
+    }
+
+    It 'does not disturb a case written before the taxonomy grew' {
+        # Grandfather clause: rows created with three verdicts and no analysis fields keep
+        # rendering and keep accepting writes, untouched by any migration.
+        $script:Store['contoso.test|OLD-1'] = [pscustomobject]@{
+            PartitionKey  = 'contoso.test'
+            RowKey        = 'OLD-1'
+            Status        = 'qualified-fp'
+            Source        = 'extsoc'
+            Title         = 'Ancien dossier'
+            Qualification = '{"Verdict":"false-positive","Justification":"RAS","Analyst":"a","DecidedUtc":"2026-08-01T10:00:00Z","PreviousVerdicts":[]}'
+        }
+
+        $Read = @(Get-PSITSocCase -TenantFilter 'contoso.test' -CaseId 'OLD-1') | Select-Object -First 1
+        $Read.Qualification.Verdict | Should -Be 'false-positive'
+
+        $Case = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'b' -CaseId 'OLD-1' -Status 'closed'
+        $Case.Status | Should -Be 'closed'
+        $Case.Qualification.Verdict | Should -Be 'false-positive'
+    }
+}
+
 Describe 'Set-PSITSocCase, lifecycle and log' {
     BeforeEach {
         Reset-Store
