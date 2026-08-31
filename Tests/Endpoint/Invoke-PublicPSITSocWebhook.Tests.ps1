@@ -38,6 +38,7 @@ BeforeAll {
         )
     }
     function Get-CippException { param($Exception) }
+    function Add-CippQueueMessage { param($Cmdlet, $Parameters, $Priority) }
 
     . $FunctionPath
 
@@ -119,5 +120,42 @@ Describe 'Invoke-PublicPSITSocWebhook severity fields' {
 
         $Result.Body.Ingested | Should -BeTrue
         Should -Invoke Set-PSITSocCase -Times 0 -ParameterFilter { $null -ne $SeverityTag -and $SeverityTag -ne '' }
+    }
+}
+
+Describe 'Invoke-PublicPSITSocWebhook enrichment queue' {
+    BeforeEach {
+        Mock -CommandName Get-PSITSocWebhookSecret -MockWith { [PSCustomObject]@{ Secret = 'the-secret' } }
+        Mock -CommandName Write-LogMessage -MockWith { }
+        Mock -CommandName Resolve-PSITSocAlertType -MockWith {
+            [PSCustomObject]@{ InScope = $true; TypeId = 2; LabelId = 'IMPOSSIBLE_TRAVEL'; Status = 'matched'; Target = 'p.martin@client.test'; EmitterTicket = $null }
+        }
+        Mock -CommandName Get-Tenants -MockWith { @() }
+        Mock -CommandName Resolve-PSITSocTenant -MockWith {
+            [PSCustomObject]@{ Tenant = 'client.test'; Method = 'exact' }
+        }
+        Mock -CommandName Set-PSITSocCase -MockWith {
+            [PSCustomObject]@{ CaseId = 'PSIT-SOC-1'; Tenant = 'client.test'; TypeId = 2 }
+        }
+        Mock -CommandName Add-CippQueueMessage -MockWith { $true }
+    }
+
+    It 'queues one enrichment for the dossier it just created' {
+        $Response = Invoke-PublicPSITSocWebhook -Request (New-WebhookRequest -Body @{ Subject = 'Impossible travel'; TenantName = 'client' }) -TriggerMetadata $null
+
+        $Response.StatusCode | Should -Be ([HttpStatusCode]::OK)
+        Should -Invoke Add-CippQueueMessage -Times 1 -ParameterFilter {
+            $Cmdlet -eq 'Start-PSITCaseEnrichment' -and $Parameters.CaseId -eq 'PSIT-SOC-1' -and $Parameters.TenantFilter -eq 'client.test'
+        }
+    }
+
+    It 'a queue refusal never fails the ingestion: the dossier exists, the pre-fill is a bonus' {
+        Mock -CommandName Add-CippQueueMessage -MockWith { throw 'queue down' }
+
+        $Response = Invoke-PublicPSITSocWebhook -Request (New-WebhookRequest -Body @{ Subject = 'Impossible travel'; TenantName = 'client' }) -TriggerMetadata $null
+
+        $Response.StatusCode | Should -Be ([HttpStatusCode]::OK)
+        $Response.Body.Ingested | Should -BeTrue
+        Should -Invoke Write-LogMessage -Times 1 -ParameterFilter { $message -match 'could not be queued' }
     }
 }

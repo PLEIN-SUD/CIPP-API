@@ -174,6 +174,18 @@ Function Invoke-PublicPSITSocWebhook {
             Detail = "Tenant resolution: $($Resolution.Method) from '$TenantName'. Alert label: $($Alert.LabelId) ($($Alert.Status)).$(if ($Alert.EmitterTicket) { " Emitter ticket #$($Alert.EmitterTicket)." })"
         }
 
+        # Pre-fill the dossier in the background: admin status, the type-20 audit search, the
+        # related dossiers. Queued, not inline - the emitter's webhook timeout is not the place
+        # to walk Graph - and a queue refusal never fails an ingestion.
+        try {
+            $null = Add-CippQueueMessage -Cmdlet 'Start-PSITCaseEnrichment' -Parameters @{
+                TenantFilter = $Case.Tenant
+                CaseId       = $Case.CaseId
+            }
+        } catch {
+            Write-LogMessage -API 'PSITSocWebhook' -tenant $Case.Tenant -message "Enrichment could not be queued for case $($Case.CaseId): $($_.Exception.Message)" -sev Warn
+        }
+
         return ([HttpResponseContext]@{
                 StatusCode = [HttpStatusCode]::OK
                 Body       = @{
