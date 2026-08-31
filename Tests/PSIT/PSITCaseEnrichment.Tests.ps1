@@ -13,6 +13,8 @@ BeforeAll {
     function Set-PSITSocCase { param($TenantFilter, $CaseId, $Analyst, $Entities, $Evidence, $LogAction) }
     function Get-PSITUserAdminStatus { param($TenantFilter, $UserId) }
     function Start-PSITDownloadAudit { param($TenantFilter, $UserPrincipalName, $CaseId, $Analyst, $AroundUtc, $HoursBefore, $HoursAfter, $Previous) }
+    function Get-PSITAuditSearchKind { param($TypeId) }
+    function Start-PSITCaseAuditSearch { param($TenantFilter, $TypeId, $UserPrincipalName, $CaseId, $Analyst, $AroundUtc, $HoursBefore, $HoursAfter, $Previous) }
     function New-GraphGetRequest { param($uri, $tenantid, $AsApp, $scope, $NoAuthCheck) }
     function Write-LogMessage { param($API, $tenant, $message, $sev, $headers, $LogData) }
 
@@ -44,6 +46,10 @@ Describe 'Start-PSITCaseEnrichment' {
             }
         }
         Mock -CommandName Start-PSITDownloadAudit -MockWith { [pscustomobject]@{ SearchId = 'search-1' } }
+        Mock -CommandName Get-PSITAuditSearchKind -MockWith {
+            if ($TypeId -in @(4, 5, 7)) { [pscustomobject]@{ Key = 'kind' } } else { $null }
+        }
+        Mock -CommandName Start-PSITCaseAuditSearch -MockWith { [pscustomobject]@{ SearchId = 'search-2' } }
     }
 
     It 'resolves the user id from the UPN, writes it back on the entities, and files the admin status' {
@@ -77,6 +83,32 @@ Describe 'Start-PSITCaseEnrichment' {
         Start-PSITCaseEnrichment -TenantFilter 'client.test' -CaseId 'PSIT-SOC-1'
 
         Should -Invoke Start-PSITDownloadAudit -Times 0
+    }
+
+    It 'starts the typed audit search for a covered type, anchored on the dossier itself' {
+        Mock -CommandName Get-PSITSocCase -MockWith { New-Case -Overrides @{ TypeId = 5 } }
+
+        Start-PSITCaseEnrichment -TenantFilter 'client.test' -CaseId 'PSIT-SOC-1'
+
+        Should -Invoke Start-PSITCaseAuditSearch -Times 1 -ParameterFilter {
+            $TypeId -eq 5 -and $UserPrincipalName -eq 'p.martin@client.test' -and $AroundUtc -eq '2026-09-02T08:00:00Z'
+        }
+        # A type without an audit question got none: the default dossier (type 2) proves it below.
+    }
+
+    It 'leaves a type without an audit question alone, and never re-launches a filed one' {
+        Mock -CommandName Get-PSITSocCase -MockWith { New-Case }
+        Start-PSITCaseEnrichment -TenantFilter 'client.test' -CaseId 'PSIT-SOC-1'
+        Should -Invoke Start-PSITCaseAuditSearch -Times 0
+
+        Mock -CommandName Get-PSITSocCase -MockWith {
+            New-Case -Overrides @{
+                TypeId   = 7
+                Evidence = [pscustomobject]@{ audit = [pscustomobject]@{ searchId = 'search-old' } }
+            }
+        }
+        Start-PSITCaseEnrichment -TenantFilter 'client.test' -CaseId 'PSIT-SOC-1'
+        Should -Invoke Start-PSITCaseAuditSearch -Times 0
     }
 
     It 'does not re-read the admin status a dossier already carries' {

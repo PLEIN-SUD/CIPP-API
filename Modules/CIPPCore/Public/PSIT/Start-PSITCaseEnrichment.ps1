@@ -85,6 +85,17 @@ function Start-PSITCaseEnrichment {
         Write-LogMessage -API 'PSITCaseEnrichment' -tenant $TenantFilter -message "Enrichment of case $($CaseId): download audit could not start: $($_.Exception.Message)" -sev Warn
     }
 
+    # --- types 4/5/7: the audit search their guide steps used to mean by hand --------------------
+    try {
+        $Upn = [string]$Case.Entities.upn
+        if ($Upn -and (Get-PSITAuditSearchKind -TypeId ([int]$Case.TypeId)) -and [string]::IsNullOrWhiteSpace([string]$Case.Evidence.audit.searchId)) {
+            $null = Start-PSITCaseAuditSearch -TenantFilter $TenantFilter -TypeId ([int]$Case.TypeId) -UserPrincipalName $Upn -CaseId $CaseId -Analyst 'enrichment' -AroundUtc ([string]$Case.CreatedUtc)
+            $Filed.Add("recherche d'audit du type")
+        }
+    } catch {
+        Write-LogMessage -API 'PSITCaseEnrichment' -tenant $TenantFilter -message "Enrichment of case $($CaseId): case audit search could not start: $($_.Exception.Message)" -sev Warn
+    }
+
     # --- scope: recent dossiers naming the same entity -------------------------------------------
     try {
         $Keys = @('upn', 'userId', 'deviceName', 'deviceId', 'appId', 'networkMessageId')
