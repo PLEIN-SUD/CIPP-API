@@ -62,7 +62,7 @@ function Set-PSITSocCase {
         [ValidateSet('P1', 'P2', 'P3', 'P4')]
         [string]$Severity,
 
-        [ValidateSet('new', 'investigating', 'qualified-fp', 'qualified-tp', 'qualified-btp', 'contained', 'closed')]
+        [ValidateSet('new', 'investigating', 'qualified-fp', 'qualified-tp', 'qualified-btp', 'on-hold', 'contained', 'closed')]
         [string]$Status,
 
         # Who is on it. Distinct from UpdatedBy, which is whoever last touched the record: a second

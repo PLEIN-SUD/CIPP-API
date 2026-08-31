@@ -23,7 +23,7 @@ function Get-PSITSocCase {
 
         [string]$CaseId,
 
-        [ValidateSet('new', 'investigating', 'qualified-fp', 'qualified-tp', 'qualified-btp', 'contained', 'closed')]
+        [ValidateSet('new', 'investigating', 'qualified-fp', 'qualified-tp', 'qualified-btp', 'on-hold', 'contained', 'closed')]
         [string]$Status,
 
         [ValidateSet('extsoc', 'xdr', 'mdo', 'manual')]
