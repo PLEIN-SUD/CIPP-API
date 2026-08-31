@@ -37,13 +37,13 @@ Function Invoke-PSITListBecIncident {
             [pscustomobject]@{
                 Entries          = @()
                 ActionsPerformed = @()
-                Unavailable      = "No case file has been opened for this mailbox, so CIPP's remediation log was not read. Save the case file to have the containment trail attached."
+                Unavailable      = "Le journal de remédiation CIPP n'a pas encore été lu : il est attaché à la fiche BEC, et aucune fiche n'est enregistrée pour cette boîte. Enregistrer la fiche déclenche la lecture, y compris pour des gestes déjà faits."
             }
         } elseif ([string]::IsNullOrWhiteSpace($Mailbox)) {
             [pscustomobject]@{
                 Entries          = @()
                 ActionsPerformed = @()
-                Unavailable      = "No mailbox address was supplied, so CIPP's remediation log could not be matched to this account."
+                Unavailable      = "Aucune adresse de boîte n'a été fournie : le journal de remédiation CIPP ne peut pas être rapproché de ce compte."
             }
         } else {
             $Since = if ($Incident.DetectedUtc) { ([datetime]$Incident.DetectedUtc).AddDays(-2) } else { [datetime]::UtcNow.AddDays(-7) }
