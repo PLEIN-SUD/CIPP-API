@@ -38,9 +38,14 @@ function Get-PSITBecRemediationLog {
     )
 
     # Endpoints whose log entries are remediation of a user account. The API field carries the
-    # endpoint name, so this is an exact match rather than a guess at message wording.
+    # endpoint name AS THE CALLER SPELLED IT: the upstream front calls /api/execBecRemediate, so
+    # every step of the Remediate User button logs under that exact casing, and the endpoint's own
+    # summary line is hardcoded to 'BECRemediate'. The table filter compares case-sensitively -
+    # missing one spelling made the whole Remediate User run invisible to the attestation, which
+    # showed 'non attestee' on a mailbox that had just been remediated.
     $RemediationApis = @(
-        'ExecBECRemediate', 'ExecResetPass', 'ExecDisableUser', 'ExecRevokeSessions',
+        'ExecBECRemediate', 'execBecRemediate', 'BECRemediate',
+        'ExecResetPass', 'ExecDisableUser', 'ExecRevokeSessions',
         'ExecResetMFA', 'ExecRemoveAdminRole', 'ExecSetCloudManaged', 'ExecSetDefaultMFAMethod',
         'ExecMailboxRule', 'ExecEditMailboxPermissions', 'ExecDisableEmailForward',
         'ExecRemoveOneDriveSharing', 'ExecOneDriveSharing', 'RemoveMailboxRule', 'ExecRevokeConsent'
@@ -50,7 +55,9 @@ function Get-PSITBecRemediationLog {
     # that matches wins, so specific patterns come before generic ones.
     $ActionPatterns = @(
         @{ Pattern = '(?i)reset.*password|password.*reset'; Action = 'PasswordReset' }
-        @{ Pattern = '(?i)disabled? (the )?account|sign[- ]?in.*(blocked|disabled)|accountEnabled'; Action = 'SignInBlocked' }
+        # 'account enabled state to False' is Set-CIPPSignInState's actual wording. 'to True' is
+        # an UNblock and must never attest a block, hence the explicit value in the pattern.
+        @{ Pattern = '(?i)disabled? (the )?account|sign[- ]?in.*(blocked|disabled)|accountEnabled|account enabled state to false'; Action = 'SignInBlocked' }
         @{ Pattern = '(?i)revoke.*session|session.*revoked'; Action = 'SessionsRevoked' }
         @{ Pattern = '(?i)mfa|authentication method|strong authentication'; Action = 'MfaMethodsRemoved' }
         # Broad on purpose: the endpoint logs "Successfully disabled rule: X", "Could not disable

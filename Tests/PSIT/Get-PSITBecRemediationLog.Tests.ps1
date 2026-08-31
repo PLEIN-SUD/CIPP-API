@@ -124,6 +124,53 @@ Describe 'Get-PSITBecRemediationLog' {
         @($Result.ActionsPerformed).Count | Should -Be 0
     }
 
+    It 'reads the Remediate User run under the casing the front actually sends' {
+        # The upstream front calls /api/execBecRemediate, so every step logs under that exact
+        # casing, and the endpoint's summary line is hardcoded to 'BECRemediate'. The table filter
+        # compares case-sensitively: an allowlist carrying only 'ExecBECRemediate' made the whole
+        # run invisible, and a freshly remediated mailbox read 'non attestee' on every action.
+        # Messages below are verbatim from the helpers the endpoint calls.
+        $script:SeenFilter = ''
+        Mock -CommandName Get-CIPPAzDataTableEntity -MockWith {
+            $script:SeenFilter = $Filter
+            @(
+                New-LogRow 'execBecRemediate' 'Successfully reset the password for Cedric REY, c.exemple@contoso.test. User must change password is set to True' 'analyste@example.test' 'Info' '2026-08-31T10:30:00Z'
+                New-LogRow 'execBecRemediate' 'Successfully set account enabled state to False for c.exemple@contoso.test' 'analyste@example.test' 'Info' '2026-08-31T10:30:05Z'
+                New-LogRow 'execBecRemediate' 'Successfully revoked sessions for c.exemple@contoso.test' 'analyste@example.test' 'Info' '2026-08-31T10:30:10Z'
+                New-LogRow 'execBecRemediate' 'Successfully removed MFA methods (microsoftAuthenticator) for user c.exemple@contoso.test. User must supply MFA at next logon' 'analyste@example.test' 'Info' '2026-08-31T10:30:15Z'
+                New-LogRow 'execBecRemediate' 'Retrieved 3 total rules for c.exemple@contoso.test' 'analyste@example.test' 'Info' '2026-08-31T10:30:20Z'
+                New-LogRow 'execBecRemediate' "Successfully set OneDrive sharing to 'Disabled' for c.exemple@contoso.test (https://contoso-my.sharepoint.com/personal/c)" 'analyste@example.test' 'Info' '2026-08-31T10:30:25Z'
+                New-LogRow 'BECRemediate' 'Executed Remediation for c.exemple@contoso.test' 'analyste@example.test' 'Info' '2026-08-31T10:30:30Z'
+            )
+        }
+
+        $Result = Get-PSITBecRemediationLog -TenantFilter 'contoso.test' -UserPrincipalName 'c.exemple@contoso.test' -SinceUtc ([datetime]'2026-08-31T00:00:00Z')
+        $Actions = @($Result.ActionsPerformed | Select-Object -ExpandProperty Action)
+
+        # The mock cannot exercise the table service's case sensitivity, so the filter string
+        # itself is pinned: both spellings must be asked for.
+        $script:SeenFilter | Should -Match "API eq 'execBecRemediate'"
+        $script:SeenFilter | Should -Match "API eq 'BECRemediate'"
+
+        $Actions | Should -Contain 'PasswordReset'
+        $Actions | Should -Contain 'SignInBlocked'
+        $Actions | Should -Contain 'SessionsRevoked'
+        $Actions | Should -Contain 'MfaMethodsRemoved'
+        $Actions | Should -Contain 'InboxRulesDisabled'
+        $Actions | Should -Contain 'SharingDisabled'
+    }
+
+    It 'never attests a sign-in block from an unblock' {
+        # 'account enabled state to True' is the mirror gesture: re-enabling the account.
+        Mock -CommandName Get-CIPPAzDataTableEntity -MockWith {
+            @(New-LogRow 'execBecRemediate' 'Successfully set account enabled state to True for c.exemple@contoso.test' 'analyste@example.test' 'Info' '2026-08-31T11:00:00Z')
+        }
+
+        $Result = Get-PSITBecRemediationLog -TenantFilter 'contoso.test' -UserPrincipalName 'c.exemple@contoso.test' -SinceUtc ([datetime]'2026-08-31T00:00:00Z')
+
+        @($Result.ActionsPerformed | Where-Object { $_.Action -eq 'SignInBlocked' }).Count | Should -Be 0
+    }
+
     It 'never looks further back than the log retention makes meaningful' {
         $Result = Get-PSITBecRemediationLog -TenantFilter 'contoso.test' -UserPrincipalName 'p.martin@contoso.test' -SinceUtc ([datetime]::UtcNow.AddDays(-400))
         $WindowStart = [datetime]::Parse($Result.WindowStartUtc)
