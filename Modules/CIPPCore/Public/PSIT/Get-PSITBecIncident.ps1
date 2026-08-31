@@ -35,6 +35,10 @@ function Get-PSITBecIncident {
             ClosedUtc      = [string]$Previous.ClosedUtc
             ClosedBy       = [string]$Previous.ClosedBy
             ClosureNote    = [string]$Previous.ClosureNote
+            # Frozen at closure, because CippLogs forgets after 90 days and this row must not.
+            ContainmentAttestation = if ([string]::IsNullOrWhiteSpace($Previous.ContainmentAttestation)) { $null } else {
+                try { $Previous.ContainmentAttestation | ConvertFrom-Json -ErrorAction Stop } catch { $null }
+            }
         }
     }
     $PreviousCases = @(@($PreviousList) | Sort-Object -Property ClosedUtc -Descending)

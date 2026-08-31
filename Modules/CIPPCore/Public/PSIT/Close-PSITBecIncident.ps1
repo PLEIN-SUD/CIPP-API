@@ -68,6 +68,27 @@ function Close-PSITBecIncident {
     $ArchivedIncident['ClosedUtc'] = $Now
     $ArchivedIncident['ClosedBy'] = $Analyst
     if ($ClosureNote) { $ArchivedIncident['ClosureNote'] = $ClosureNote }
+
+    # The containment attestation is FROZEN here. It is read from CippLogs, whose retention is
+    # 90 days: a case reopened for an insurer at J+120 would otherwise show 'nothing attested'
+    # about gestures that were real. Closure is the archival moment, so this is where the trail
+    # stops depending on its source. A failed read logs and archives without it - closing a case
+    # must not be hostage to a log partition.
+    try {
+        $Upn = [string]$Incident.UserPrincipalName
+        if ($Upn) {
+            $Since = if ($Incident.DetectedUtc) { ([datetime]$Incident.DetectedUtc).AddDays(-2) } else { [datetime]::UtcNow.AddDays(-30) }
+            $Trail = Get-PSITBecRemediationLog -TenantFilter $TenantFilter -UserPrincipalName $Upn -UserId $UserId -SinceUtc $Since
+            $ArchivedIncident['ContainmentAttestation'] = [string]([pscustomobject]@{
+                    FrozenUtc        = $Now
+                    WindowStartUtc   = $Trail.WindowStartUtc
+                    ActionsPerformed = @($Trail.ActionsPerformed)
+                    Entries          = @($Trail.Entries | Select-Object -First 100)
+                } | ConvertTo-Json -Depth 6 -Compress)
+        }
+    } catch {
+        Write-LogMessage -API 'PSITBecIncident' -tenant $TenantFilter -message "Containment attestation could not be frozen on closure of $($Reference): $($_.Exception.Message)" -sev Warn
+    }
     $ArchivedIncident['UserId'] = $UserId
 
     $null = Add-CIPPAzDataTableEntity @IncidentTable -Entity $ArchivedIncident -Force

@@ -421,3 +421,46 @@ Describe 'Close-PSITBecIncident' {
         $Closure.Reason | Should -Match 'nothing to close'
     }
 }
+
+Describe 'Close-PSITBecIncident freezes the attestation' {
+    BeforeEach {
+        Mock -CommandName Write-LogMessage -MockWith { }
+        $script:Archived = $null
+        Mock -CommandName Add-CIPPAzDataTableEntity -MockWith { $script:Archived = $Entity }
+        Mock -CommandName Remove-AzDataTableEntity -MockWith { }
+        Mock -CommandName Get-CIPPAzDataTableEntity -MockWith {
+            [pscustomobject]@{
+                PartitionKey = 'contoso.test'; RowKey = 'user-guid'
+                Reference = 'PSIT-BEC-20260828-AAAA'; UserPrincipalName = 'p.martin@contoso.test'
+                DetectedUtc = '2026-08-28T10:00:00Z'
+            }
+        }
+    }
+
+    It 'copies the containment trail onto the archived row: CippLogs forgets, the fiche must not' {
+        Mock -CommandName Get-PSITBecRemediationLog -MockWith {
+            [pscustomobject]@{
+                WindowStartUtc   = '2026-08-26T10:00:00Z'
+                Entries          = @([pscustomobject]@{ TimestampUtc = '2026-08-28T10:28:00Z'; Action = 'PasswordReset'; Operator = 'a@partner.test' })
+                ActionsPerformed = @([pscustomobject]@{ Action = 'PasswordReset'; Count = 1; FirstUtc = '2026-08-28T10:28:00Z'; Operator = 'a@partner.test'; HasFailure = $false })
+            }
+        }
+
+        $Result = Close-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'user-guid' -Analyst 'a@partner.test'
+
+        $Result.Closed | Should -BeTrue
+        $Frozen = $script:Archived['ContainmentAttestation'] | ConvertFrom-Json
+        $Frozen.ActionsPerformed[0].Action | Should -Be 'PasswordReset'
+        $Frozen.FrozenUtc | Should -Not -BeNullOrEmpty
+    }
+
+    It 'a failed trail read never blocks the closure' {
+        Mock -CommandName Get-PSITBecRemediationLog -MockWith { throw 'partition gone' }
+
+        $Result = Close-PSITBecIncident -TenantFilter 'contoso.test' -UserId 'user-guid' -Analyst 'a@partner.test'
+
+        $Result.Closed | Should -BeTrue
+        $script:Archived.ContainsKey('ContainmentAttestation') | Should -BeFalse
+        Should -Invoke Write-LogMessage -Times 1 -ParameterFilter { $message -match 'could not be frozen' }
+    }
+}
