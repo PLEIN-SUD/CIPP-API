@@ -115,8 +115,13 @@ function Set-PSITSocCase {
         # IT... This is what feeds the recommendations instead of leaving them generic.
         [string]$RootCause,
 
-        # Array of { StepId, State (done|skipped|pending) }: progress on the investigation guide
-        # of the case's type. Merged per StepId.
+        # Array of { StepId, State (done|skipped|unknown|pending), Note }: progress on the
+        # investigation guide of the case's type, merged per StepId. Each step is a question, so
+        # each settled step carries its answer: Note is the analyst's finding ('aucun forward',
+        # 'titulaire joint, pas dans le pays'), stamped with By/Utc like the state. 'unknown'
+        # means 'looked, cannot answer' - a recorded impasse, distinct from not-done-yet. The
+        # note requirement is enforced by the UI (the only writing surface), not here: legacy
+        # dossiers and tests keep working without notes.
         $GuideProgress,
 
         # One analyst-declared log entry: { Action, Detail }. For actions taken outside CIPP.
@@ -292,10 +297,15 @@ function Set-PSITSocCase {
         $StepId = [string]$Step.StepId
         if ([string]::IsNullOrWhiteSpace($StepId)) { continue }
         $State = [string]$Step.State
-        if ($State -notin @('done', 'skipped', 'pending')) {
-            throw "Invalid guide step state '$State' for step '$StepId'. Expected done, skipped or pending."
+        if ($State -notin @('done', 'skipped', 'unknown', 'pending')) {
+            throw "Invalid guide step state '$State' for step '$StepId'. Expected done, skipped, unknown or pending."
         }
-        $Progress[$StepId] = [pscustomobject]@{ State = $State; By = $Analyst; Utc = $Now }
+        # The finding travels with the state; a write without one keeps the note already filed
+        # (un-ticking a step must not erase what was found when it was ticked).
+        $Note = [string]$Step.Note
+        if ([string]::IsNullOrWhiteSpace($Note)) { $Note = [string]$Progress[$StepId].Note }
+        if ($Note.Length -gt 500) { $Note = $Note.Substring(0, 500) }
+        $Progress[$StepId] = [pscustomobject]@{ State = $State; By = $Analyst; Utc = $Now; Note = $Note }
     }
 
     # --- action log ------------------------------------------------------------------------------

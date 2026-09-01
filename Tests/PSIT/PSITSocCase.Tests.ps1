@@ -478,3 +478,52 @@ Describe 'Set-PSITSocCase, cross-transport dedupe' {
         $script:Store.Count | Should -Be 2
     }
 }
+
+Describe 'Set-PSITSocCase, guide findings' {
+    BeforeEach {
+        Reset-Store
+        Enable-StoreMocks
+        Mock -CommandName Write-LogMessage -MockWith { }
+    }
+
+    It 'files the finding with the step: who answered what, and when' {
+        $Case = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a@example.test' -Source 'extsoc' -TypeId 2 -Title 'Connexion suspecte'
+        $Updated = Set-PSITSocCase -TenantFilter 'contoso.test' -CaseId $Case.CaseId -Analyst 'a@example.test' -GuideProgress @(
+            @{ StepId = 'origin'; State = 'done'; Note = 'Titulaire joint : en déplacement, connexion assumée' }
+        )
+
+        $Updated.GuideProgress.origin.State | Should -Be 'done'
+        $Updated.GuideProgress.origin.Note | Should -Be 'Titulaire joint : en déplacement, connexion assumée'
+        $Updated.GuideProgress.origin.By | Should -Be 'a@example.test'
+    }
+
+    It 'accepts the recorded impasse: looked, cannot answer' {
+        $Case = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a@example.test' -Source 'extsoc' -TypeId 2 -Title 'Connexion suspecte'
+        $Updated = Set-PSITSocCase -TenantFilter 'contoso.test' -CaseId $Case.CaseId -Analyst 'a@example.test' -GuideProgress @(
+            @{ StepId = 'origin'; State = 'unknown'; Note = "Titulaire injoignable, journal de connexion muet sur l'adresse" }
+        )
+
+        $Updated.GuideProgress.origin.State | Should -Be 'unknown'
+    }
+
+    It 'un-ticking a step keeps the finding it recorded' {
+        # The state flips back, the answer stays: what was found does not un-happen.
+        $Case = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a@example.test' -Source 'extsoc' -TypeId 2 -Title 'Connexion suspecte'
+        $null = Set-PSITSocCase -TenantFilter 'contoso.test' -CaseId $Case.CaseId -Analyst 'a@example.test' -GuideProgress @(
+            @{ StepId = 'origin'; State = 'done'; Note = 'Aucun forward en place' }
+        )
+        $Updated = Set-PSITSocCase -TenantFilter 'contoso.test' -CaseId $Case.CaseId -Analyst 'b@example.test' -GuideProgress @(
+            @{ StepId = 'origin'; State = 'pending' }
+        )
+
+        $Updated.GuideProgress.origin.State | Should -Be 'pending'
+        $Updated.GuideProgress.origin.Note | Should -Be 'Aucun forward en place'
+    }
+
+    It 'still refuses a state outside the four it knows' {
+        $Case = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a@example.test' -Source 'extsoc' -TypeId 2 -Title 'Connexion suspecte'
+        { Set-PSITSocCase -TenantFilter 'contoso.test' -CaseId $Case.CaseId -Analyst 'a@example.test' -GuideProgress @(
+                @{ StepId = 'origin'; State = 'maybe' }
+            ) } | Should -Throw '*Invalid guide step state*'
+    }
+}
