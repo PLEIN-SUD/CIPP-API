@@ -154,6 +154,24 @@ function Set-PSITSocCase {
                 return $Open
             }
         }
+        # Cross-transport dedupe: the same incident arrives as the external SOC's notification AND
+        # as a Defender alert, each with its own reference, so the ExternalRef check above never
+        # sees them as one. Automated sources only: an analyst creating a dossier by hand has
+        # already decided it deserves one.
+        if ($Source -in @('extsoc', 'xdr', 'mdo') -and $null -ne $Entities) {
+            $Duplicate = Find-PSITSocDuplicateCase -TenantFilter $TenantFilter -TypeId $TypeId -Entities $Entities
+            if ($Duplicate) {
+                $Reference = if (-not [string]::IsNullOrWhiteSpace($ExternalRef)) { " (réf $ExternalRef)" } else { '' }
+                Write-Information "SOC case creation deduplicated on ${TenantFilter}: signal from $Source matches $($Duplicate.CaseId), journaling there instead of creating a twin."
+                $Updated = Set-PSITSocCase -TenantFilter $TenantFilter -CaseId $Duplicate.CaseId -Analyst $Analyst -LogAction @{
+                    Action = 'duplicate-signal'
+                    Detail = "Signal doublon reçu via $Source$Reference : rattaché à ce dossier plutôt qu'ouvert en double."
+                }
+                # Ephemeral response marker, never persisted: the caller words its answer with it.
+                $Updated | Add-Member -NotePropertyName 'Reattached' -NotePropertyValue $true -Force
+                return $Updated
+            }
+        }
         # Same shape as the BEC incident reference: date-stamped, human-quotable over the phone.
         $CaseId = 'PSIT-SOC-{0}-{1}' -f [datetime]::UtcNow.ToString('yyyyMMdd'), ([guid]::NewGuid().ToString().Substring(0, 4).ToUpperInvariant())
         $SystemLog.Add([pscustomobject]@{ Utc = $Now; Analyst = $Analyst; Action = 'created'; Detail = "type $TypeId, source $Source" })

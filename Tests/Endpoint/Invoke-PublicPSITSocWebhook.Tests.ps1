@@ -149,6 +149,22 @@ Describe 'Invoke-PublicPSITSocWebhook enrichment queue' {
         }
     }
 
+    It 'says a deduplicated signal was attached, not ingested as a new dossier' {
+        # The same incident arriving through a second transport: Set-PSITSocCase answers with the
+        # existing dossier and the ephemeral Reattached marker, and the emitter's automation must
+        # be able to tell the two outcomes apart.
+        Mock -CommandName Set-PSITSocCase -MockWith {
+            [PSCustomObject]@{ CaseId = 'PSIT-SOC-1'; Tenant = 'client.test'; TypeId = 2; Reattached = $true }
+        }
+
+        $Response = Invoke-PublicPSITSocWebhook -Request (New-WebhookRequest -Body @{ Subject = 'Impossible travel'; TenantName = 'client' }) -TriggerMetadata $null
+
+        $Response.StatusCode | Should -Be ([HttpStatusCode]::OK)
+        $Response.Body.Reattached | Should -BeTrue
+        $Response.Body.Results | Should -Match 'attached to existing'
+        $Response.Body.CaseId | Should -Be 'PSIT-SOC-1'
+    }
+
     It 'a queue refusal never fails the ingestion: the dossier exists, the pre-fill is a bonus' {
         Mock -CommandName Add-CippQueueMessage -MockWith { throw 'queue down' }
 

@@ -10,6 +10,7 @@ BeforeAll {
     $RepoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSCommandPath))
     . (Join-Path $RepoRoot 'Modules/CIPPCore/Public/PSIT/Get-PSITSocCase.ps1')
     . (Join-Path $RepoRoot 'Modules/CIPPCore/Public/PSIT/Set-PSITSocCase.ps1')
+    . (Join-Path $RepoRoot 'Modules/CIPPCore/Public/PSIT/Find-PSITSocDuplicateCase.ps1')
 
     function Get-CippTable { param($tablename) @{ Table = $tablename } }
     function Get-CIPPAzDataTableEntity { param($Table, $Filter) }
@@ -395,5 +396,85 @@ Describe 'Set-PSITSocCase emitter tag and ticket link' {
         $script:Written[0].Severity | Should -Be 'P2'
         $script:Written[0].SeverityTag | Should -Be 'High Priority'
         $script:Written[0].TicketUrl | Should -Be 'https://tickets.example.test/1'
+    }
+}
+
+Describe 'Set-PSITSocCase, cross-transport dedupe' {
+    BeforeEach {
+        Reset-Store
+        Enable-StoreMocks
+        Mock -CommandName Write-LogMessage -MockWith { }
+    }
+
+    It 'attaches the same incident arriving through another transport to the open dossier' {
+        # The external SOC notification and the Defender XDR alert carry different references:
+        # the ExternalRef idempotence never sees them as one, this is what does.
+        $First = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'webhook' -Source 'extsoc' -TypeId 2 -Title 'Connexion suspecte' -ExternalRef 'TICKET-1' -Entities @{ upn = 'p.martin@contoso.test' }
+        $Second = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'webhook' -Source 'xdr' -TypeId 2 -Title 'Suspicious sign-in' -ExternalRef 'INC-999' -Entities @{ upn = 'p.martin@contoso.test' }
+
+        $Second.CaseId | Should -Be $First.CaseId
+        $Second.Reattached | Should -BeTrue
+        $script:Store.Count | Should -Be 1
+        # The arrival is journaled on the dossier, with the transport and its reference.
+        $Entry = @($Second.ActionLog | Where-Object { $_.Action -eq 'duplicate-signal' })
+        $Entry.Count | Should -Be 1
+        $Entry[0].Detail | Should -Match 'xdr'
+        $Entry[0].Detail | Should -Match 'INC-999'
+    }
+
+    It 'never glues two dossiers that only share a type' {
+        $First = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'webhook' -Source 'extsoc' -TypeId 2 -Title 'Connexion suspecte' -Entities @{ upn = 'p.martin@contoso.test' }
+        $Second = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'webhook' -Source 'xdr' -TypeId 2 -Title 'Suspicious sign-in' -Entities @{ upn = 'a.dupont@contoso.test' }
+
+        $Second.CaseId | Should -Not -Be $First.CaseId
+        $script:Store.Count | Should -Be 2
+    }
+
+    It 'never glues two types on the same account: a rule alert is not a sign-in alert' {
+        $First = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'webhook' -Source 'extsoc' -TypeId 2 -Title 'Connexion suspecte' -Entities @{ upn = 'p.martin@contoso.test' }
+        $Second = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'webhook' -Source 'xdr' -TypeId 5 -Title 'Inbox rule created' -Entities @{ upn = 'p.martin@contoso.test' }
+
+        $Second.CaseId | Should -Not -Be $First.CaseId
+        $script:Store.Count | Should -Be 2
+    }
+
+    It 'lets an analyst create by hand even when an automated twin exists' {
+        $null = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'webhook' -Source 'extsoc' -TypeId 2 -Title 'Connexion suspecte' -Entities @{ upn = 'p.martin@contoso.test' }
+        $Manual = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'analyste@example.test' -Source 'manual' -TypeId 2 -Title 'Dossier volontaire' -Entities @{ upn = 'p.martin@contoso.test' }
+
+        $Manual.Reattached | Should -BeNullOrEmpty
+        $script:Store.Count | Should -Be 2
+    }
+
+    It 'never swallows a signal into a closed dossier' {
+        # A repeat after closure can be a new compromise: it must land in the queue, not in a
+        # journal line nobody reads. The related-cases enrichment shows the closed sibling.
+        $First = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'webhook' -Source 'extsoc' -TypeId 2 -Title 'Connexion suspecte' -Entities @{ upn = 'p.martin@contoso.test' }
+        $null = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -CaseId $First.CaseId -Status 'closed'
+
+        $Second = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'webhook' -Source 'xdr' -TypeId 2 -Title 'Suspicious sign-in' -Entities @{ upn = 'p.martin@contoso.test' }
+
+        $Second.CaseId | Should -Not -Be $First.CaseId
+        $script:Store.Count | Should -Be 2
+    }
+
+    It 'ignores a dossier older than the window' {
+        $First = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'webhook' -Source 'extsoc' -TypeId 2 -Title 'Connexion suspecte' -Entities @{ upn = 'p.martin@contoso.test' }
+        # Age the stored dossier: three days is another story, not another transport.
+        $Row = $script:Store["contoso.test|$($First.CaseId)"]
+        $Row.CreatedUtc = [datetime]::UtcNow.AddDays(-3).ToString('yyyy-MM-ddTHH:mm:ssZ')
+
+        $Second = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'webhook' -Source 'xdr' -TypeId 2 -Title 'Suspicious sign-in' -Entities @{ upn = 'p.martin@contoso.test' }
+
+        $Second.CaseId | Should -Not -Be $First.CaseId
+        $script:Store.Count | Should -Be 2
+    }
+
+    It 'never matches on an empty entity set: unattributed alerts are not one incident' {
+        $First = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'webhook' -Source 'extsoc' -TypeId 18 -Title 'Campagne de phishing' -Entities @{}
+        $Second = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'webhook' -Source 'mdo' -TypeId 18 -Title 'Phish campaign' -Entities @{}
+
+        $Second.CaseId | Should -Not -Be $First.CaseId
+        $script:Store.Count | Should -Be 2
     }
 }

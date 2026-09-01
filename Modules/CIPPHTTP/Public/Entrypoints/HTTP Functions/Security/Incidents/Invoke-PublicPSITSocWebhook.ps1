@@ -189,8 +189,9 @@ Function Invoke-PublicPSITSocWebhook {
         return ([HttpResponseContext]@{
                 StatusCode = [HttpStatusCode]::OK
                 Body       = @{
-                    Results          = "SOC case $($Case.CaseId) ingested."
+                    Results          = if ($Case.Reattached) { "Signal attached to existing SOC case $($Case.CaseId)." } else { "SOC case $($Case.CaseId) ingested." }
                     Ingested         = $true
+                    Reattached       = [bool]$Case.Reattached
                     CaseId           = $Case.CaseId
                     Tenant           = $Case.Tenant
                     TenantResolution = $Resolution.Method
