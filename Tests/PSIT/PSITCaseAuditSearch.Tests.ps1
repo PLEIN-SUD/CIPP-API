@@ -163,7 +163,7 @@ Describe 'Get-PSITCaseAuditSearch' {
                         ObjectId     = 'y.exemple@client.test'
                         CreationTime = '2026-08-28T15:24:00Z'
                         ClientIP     = '198.51.100.4'
-                        Parameters   = @([PSCustomObject]@{ Name = 'ForwardingSmtpAddress'; Value = 'smtp:pivot@exemple.net' })
+                        Parameters   = @([PSCustomObject]@{ Name = 'ForwardingSmtpAddress'; Value = 'smtp:pivot@example.net' })
                     }
                 }
             )
