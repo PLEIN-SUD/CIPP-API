@@ -263,8 +263,20 @@ function Set-PSITSocCase {
     }
     # Closing on 'undetermined' is allowed - sometimes the data will never come - but never
     # silently: unclear is a holding state, and a case that leaves it unresolved must say why.
+    # And closing takes a verdict, full stop: a closed dossier with no qualification can never
+    # produce a report (the lock requires a verdict), which strands it forever. Grandfathered on
+    # the same date as the tab gating: dossiers from before the frame close as they always did.
     if ($NewStatus -eq 'closed' -and $PreviousStatus -ne 'closed') {
         $ClosingVerdict = if ($Verdict) { $Verdict } else { [string]$Qualification.Verdict }
+        $CreatedBeforeFrame = $false
+        try {
+            $CreatedBeforeFrame = [datetime]::Parse([string]$Existing.CreatedUtc, [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::AdjustToUniversal) -lt [datetime]::Parse('2026-09-01T00:00:00Z', [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::AdjustToUniversal)
+        } catch {
+            $CreatedBeforeFrame = $false
+        }
+        if ([string]::IsNullOrWhiteSpace($ClosingVerdict) -and -not $CreatedBeforeFrame) {
+            throw "La clôture exige un verdict : qualifiez le dossier avant de le clore (l'indéterminé est un verdict recevable, justification à l'appui)."
+        }
         $HasJustification = -not [string]::IsNullOrWhiteSpace([string]$Justification) -or
             -not [string]::IsNullOrWhiteSpace([string]$Qualification.Justification)
         if ($ClosingVerdict -eq 'undetermined' -and -not $HasJustification) {

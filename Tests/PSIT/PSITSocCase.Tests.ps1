@@ -71,7 +71,7 @@ Describe 'Set-PSITSocCase, creation' {
 
     It 'a closed case does not block a new adoption of the same reference' {
         $First = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -Source 'xdr' -TypeId 13 -Title 'Malware blocked' -ExternalRef 'INC-12345'
-        $null = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -CaseId $First.CaseId -Status 'closed'
+        $null = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -CaseId $First.CaseId -Status 'closed' -Verdict 'false-positive' -Justification 'test'
 
         $Second = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -Source 'xdr' -TypeId 13 -Title 'Malware blocked again' -ExternalRef 'INC-12345'
         $Second.CaseId | Should -Not -Be $First.CaseId
@@ -213,7 +213,7 @@ Describe 'Set-PSITSocCase, lifecycle and log' {
     }
 
     It 'closing stamps who and when; reopening clears the stamps and says so' {
-        $Closed = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'closer@example.test' -CaseId $script:Case.CaseId -Status 'closed'
+        $Closed = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'closer@example.test' -CaseId $script:Case.CaseId -Status 'closed' -Verdict 'false-positive' -Justification 'test'
         $Closed.ClosedBy | Should -Be 'closer@example.test'
         $Closed.ClosedUtc | Should -Not -BeNullOrEmpty
 
@@ -450,7 +450,7 @@ Describe 'Set-PSITSocCase, cross-transport dedupe' {
         # A repeat after closure can be a new compromise: it must land in the queue, not in a
         # journal line nobody reads. The related-cases enrichment shows the closed sibling.
         $First = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'webhook' -Source 'extsoc' -TypeId 2 -Title 'Connexion suspecte' -Entities @{ upn = 'p.martin@contoso.test' }
-        $null = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -CaseId $First.CaseId -Status 'closed'
+        $null = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -CaseId $First.CaseId -Status 'closed' -Verdict 'false-positive' -Justification 'test'
 
         $Second = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'webhook' -Source 'xdr' -TypeId 2 -Title 'Suspicious sign-in' -Entities @{ upn = 'p.martin@contoso.test' }
 
@@ -525,5 +525,37 @@ Describe 'Set-PSITSocCase, guide findings' {
         { Set-PSITSocCase -TenantFilter 'contoso.test' -CaseId $Case.CaseId -Analyst 'a@example.test' -GuideProgress @(
                 @{ StepId = 'origin'; State = 'maybe' }
             ) } | Should -Throw '*Invalid guide step state*'
+    }
+}
+
+Describe 'Set-PSITSocCase, closing takes a verdict' {
+    BeforeEach {
+        Reset-Store
+        Enable-StoreMocks
+        Mock -CommandName Write-LogMessage -MockWith { }
+    }
+
+    It 'refuses to close an unqualified dossier: closed without a verdict is stranded forever' {
+        $Case = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -Source 'extsoc' -TypeId 2 -Title 'Connexion suspecte'
+
+        { Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -CaseId $Case.CaseId -Status 'closed' } |
+            Should -Throw '*La clôture exige un verdict*'
+    }
+
+    It 'closes a qualified dossier, verdict in the same call or already posed' {
+        $Case = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -Source 'extsoc' -TypeId 2 -Title 'Connexion suspecte'
+        $Closed = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -CaseId $Case.CaseId -Status 'closed' -Verdict 'false-positive' -Justification 'VPN du titulaire, confirmé'
+
+        $Closed.Status | Should -Be 'closed'
+    }
+
+    It 'grandfathers the dossiers from before the frame: they close as they always did' {
+        $Case = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -Source 'extsoc' -TypeId 2 -Title 'Connexion suspecte'
+        $Row = $script:Store["contoso.test|$($Case.CaseId)"]
+        $Row.CreatedUtc = '2026-08-15T08:00:00Z'
+
+        $Closed = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -CaseId $Case.CaseId -Status 'closed'
+
+        $Closed.Status | Should -Be 'closed'
     }
 }
