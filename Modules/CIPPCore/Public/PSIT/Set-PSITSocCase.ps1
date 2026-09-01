@@ -125,7 +125,15 @@ function Set-PSITSocCase {
         $GuideProgress,
 
         # One analyst-declared log entry: { Action, Detail }. For actions taken outside CIPP.
-        $LogAction
+        $LogAction,
+
+        # The raw subject of the emitter's mail, as received: the dossier title is derived, and
+        # the analyst sometimes needs the original wording. Capped, kept once set.
+        [string]$SourceSubject,
+
+        # An excerpt of the emitter's mail body, when the ingestion sends one. Capped hard: this
+        # is a hover preview, not an archive - the mail itself lives in the ticket.
+        [string]$SourceMail
     )
 
     if ($PSBoundParameters.ContainsKey('TypeId') -and $TypeId -eq 8) {
@@ -407,6 +415,8 @@ function Set-PSITSocCase {
         Qualification = if ($Qualification) { [string]($Qualification | ConvertTo-Json -Depth 8 -Compress) } else { [string]$Existing.Qualification }
         GuideProgress = [string]([pscustomobject]$Progress | ConvertTo-Json -Depth 6 -Compress)
         ActionLog     = [string](@($Log) | ConvertTo-Json -Depth 6 -Compress -AsArray)
+        SourceSubject = & $Keep $(if ($SourceSubject.Length -gt 300) { $SourceSubject.Substring(0, 300) } else { $SourceSubject }) $Existing.SourceSubject
+        SourceMail    = & $Keep $(if ($SourceMail.Length -gt 2000) { $SourceMail.Substring(0, 2000) } else { $SourceMail }) $Existing.SourceMail
         CreatedUtc    = if ($Existing) { [string]$Existing.CreatedUtc } else { $Now }
         CreatedBy     = if ($Existing) { [string]$Existing.CreatedBy } else { $Analyst }
         UpdatedUtc    = $Now

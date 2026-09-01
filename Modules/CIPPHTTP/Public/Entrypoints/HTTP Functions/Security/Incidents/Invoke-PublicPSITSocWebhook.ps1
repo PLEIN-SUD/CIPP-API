@@ -123,6 +123,13 @@ Function Invoke-PublicPSITSocWebhook {
             Source       = if ([string]::IsNullOrWhiteSpace($Body.Source)) { 'extsoc' } else { [string]$Body.Source }
             # The label read off the subject, when the caller sends no title of its own.
             Title        = if ([string]::IsNullOrWhiteSpace($Body.Title)) { [string]$Alert.Label } else { [string]$Body.Title }
+            # The original wording, kept verbatim: the queue shows it on hover of the title.
+            SourceSubject = [string]$Body.Subject
+        }
+        # Optional mail-body excerpt for the ticket hover; the contract stays backward: absent
+        # is absent.
+        if (-not [string]::IsNullOrWhiteSpace($Body.MailBody)) {
+            $Parameters.SourceMail = [string]$Body.MailBody
         }
         if ($null -ne $Body.TypeId -and "$($Body.TypeId)" -match '^\d+$') {
             $Parameters.TypeId = [int]$Body.TypeId

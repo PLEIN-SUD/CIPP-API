@@ -34,7 +34,8 @@ BeforeAll {
     function Set-PSITSocCase {
         param(
             $TenantFilter, $CaseId, $Analyst, $Source, $Title, $TypeId, $DetectionSource,
-            $Severity, $SeverityTag, $ExternalRef, $TicketRef, $TicketUrl, $Entities, $LogAction
+            $Severity, $SeverityTag, $ExternalRef, $TicketRef, $TicketUrl, $Entities, $LogAction,
+            $SourceSubject, $SourceMail
         )
     }
     function Get-CippException { param($Exception) }
@@ -138,6 +139,18 @@ Describe 'Invoke-PublicPSITSocWebhook enrichment queue' {
             [PSCustomObject]@{ CaseId = 'PSIT-SOC-1'; Tenant = 'client.test'; TypeId = 2 }
         }
         Mock -CommandName Add-CippQueueMessage -MockWith { $true }
+    }
+
+    It 'files the original mail on the dossier: raw subject always, body excerpt when sent' {
+        $null = Invoke-PublicPSITSocWebhook -Request (New-WebhookRequest -Body @{
+                Subject = '[SOC x Client] Impossible travel - p.martin'; TenantName = 'client'
+                MailBody = 'Bonjour, une connexion inhabituelle a été détectée...'
+            }) -TriggerMetadata $null
+
+        Should -Invoke Set-PSITSocCase -Times 1 -ParameterFilter {
+            $SourceSubject -eq '[SOC x Client] Impossible travel - p.martin' -and
+            $SourceMail -like 'Bonjour, une connexion*'
+        }
     }
 
     It 'queues one enrichment for the dossier it just created' {

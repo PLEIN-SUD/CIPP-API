@@ -110,6 +110,8 @@ function ConvertFrom-PSITSocCaseRow {
         Qualification = & $ParseJson $Row.Qualification $null
         GuideProgress = & $ParseJson $Row.GuideProgress ([pscustomobject]@{})
         ActionLog     = @(& $ParseJson $Row.ActionLog @())
+        SourceSubject = [string]$Row.SourceSubject
+        SourceMail    = [string]$Row.SourceMail
         CreatedUtc    = [string]$Row.CreatedUtc
         CreatedBy     = [string]$Row.CreatedBy
         UpdatedUtc    = [string]$Row.UpdatedUtc

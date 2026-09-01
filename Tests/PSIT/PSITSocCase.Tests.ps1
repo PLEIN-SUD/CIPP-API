@@ -559,3 +559,24 @@ Describe 'Set-PSITSocCase, closing takes a verdict' {
         $Closed.Status | Should -Be 'closed'
     }
 }
+
+Describe 'Set-PSITSocCase, the original mail' {
+    BeforeEach {
+        Reset-Store
+        Enable-StoreMocks
+        Mock -CommandName Write-LogMessage -MockWith { }
+    }
+
+    It 'keeps the raw subject and the mail excerpt, capped, once set' {
+        $Case = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'webhook' -Source 'extsoc' -TypeId 2 -Title 'Connexion suspecte' `
+            -SourceSubject ('S' * 400) -SourceMail ('M' * 3000)
+
+        $Case.SourceSubject.Length | Should -Be 300
+        $Case.SourceMail.Length | Should -Be 2000
+
+        # A later update without these fields must not erase them.
+        $Updated = Set-PSITSocCase -TenantFilter 'contoso.test' -Analyst 'a' -CaseId $Case.CaseId -Status 'investigating'
+        $Updated.SourceSubject.Length | Should -Be 300
+        $Updated.SourceMail.Length | Should -Be 2000
+    }
+}
