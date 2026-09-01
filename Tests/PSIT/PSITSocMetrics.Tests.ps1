@@ -136,3 +136,22 @@ Describe 'Get-PSITSocMetrics' {
         $Metrics.Delays.CloseCount | Should -Be 0
     }
 }
+
+Describe 'Get-PSITSocMetrics, weekly series' {
+    It 'buckets the weekly series on ISO weeks, oldest first' {
+        # 2026-08-01 is a Saturday of ISO week 31; 2026-08-03 opens week 32; 2026-09-01 is week 36.
+        $Cases = @(
+            [pscustomobject]@{ CaseId = 'A'; Tenant = 't'; TypeId = 2; Severity = 'P2'; Status = 'closed'; CreatedUtc = '2026-08-01T08:00:00Z'; ClosedUtc = ''; Qualification = [pscustomobject]@{ Verdict = 'true-positive'; DecidedUtc = ''; PreviousVerdicts = @() }; ActionLog = @() }
+            [pscustomobject]@{ CaseId = 'B'; Tenant = 't'; TypeId = 2; Severity = 'P2'; Status = 'new'; CreatedUtc = '2026-08-03T08:00:00Z'; ClosedUtc = ''; Qualification = $null; ActionLog = @() }
+            [pscustomobject]@{ CaseId = 'C'; Tenant = 't'; TypeId = 2; Severity = 'P2'; Status = 'new'; CreatedUtc = '2026-09-01T08:00:00Z'; ClosedUtc = ''; Qualification = [pscustomobject]@{ Verdict = 'false-positive'; DecidedUtc = ''; PreviousVerdicts = @() }; ActionLog = @() }
+        )
+
+        $Metrics = Get-PSITSocMetrics -Cases $Cases
+
+        $Metrics.ByWeek[0].Week | Should -Be '2026-S31'
+        $Metrics.ByWeek[0].TruePositives | Should -Be 1
+        $Metrics.ByWeek[1].Week | Should -Be '2026-S32'
+        $Metrics.ByWeek[2].Week | Should -Be '2026-S36'
+        $Metrics.ByWeek[2].FalsePositives | Should -Be 1
+    }
+}

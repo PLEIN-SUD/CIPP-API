@@ -43,6 +43,7 @@ function Get-PSITSocMetrics {
     $ByType = @{}
     $ByTenant = @{}
     $ByMonth = @{}
+    $ByWeek = @{}
     $TakeMinutes = [System.Collections.Generic.List[double]]::new()
     $VerdictMinutes = [System.Collections.Generic.List[double]]::new()
     $CloseMinutes = [System.Collections.Generic.List[double]]::new()
@@ -91,6 +92,15 @@ function Get-PSITSocMetrics {
             $ByMonth[$Month].Count++
             if ($Verdict -eq 'true-positive') { $ByMonth[$Month].TruePositives++ }
             if ($Verdict -eq 'false-positive') { $ByMonth[$Month].FalsePositives++ }
+
+            # ISO week, so a Monday-anchored trend line never splits a week across two buckets.
+            $Week = '{0}-S{1:d2}' -f [System.Globalization.ISOWeek]::GetYear($Created), [System.Globalization.ISOWeek]::GetWeekOfYear($Created)
+            if (-not $ByWeek.ContainsKey($Week)) {
+                $ByWeek[$Week] = @{ Count = 0; TruePositives = 0; FalsePositives = 0 }
+            }
+            $ByWeek[$Week].Count++
+            if ($Verdict -eq 'true-positive') { $ByWeek[$Week].TruePositives++ }
+            if ($Verdict -eq 'false-positive') { $ByWeek[$Week].FalsePositives++ }
 
             # Time to take: the first move into investigation, whichever entry wrote it.
             $Taken = @($Case.ActionLog | Where-Object { [string]$_.Action -eq 'status' -and [string]$_.Detail -eq 'investigating' } |
@@ -153,6 +163,14 @@ function Get-PSITSocMetrics {
         ByMonth   = @($ByMonth.GetEnumerator() | Sort-Object -Property Key | ForEach-Object {
                 [pscustomobject]@{
                     Month          = $_.Key
+                    Count          = [int]$_.Value.Count
+                    TruePositives  = [int]$_.Value.TruePositives
+                    FalsePositives = [int]$_.Value.FalsePositives
+                }
+            })
+        ByWeek    = @($ByWeek.GetEnumerator() | Sort-Object -Property Key | ForEach-Object {
+                [pscustomobject]@{
+                    Week           = $_.Key
                     Count          = [int]$_.Value.Count
                     TruePositives  = [int]$_.Value.TruePositives
                     FalsePositives = [int]$_.Value.FalsePositives
