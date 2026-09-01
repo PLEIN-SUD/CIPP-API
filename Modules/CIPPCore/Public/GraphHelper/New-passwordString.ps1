@@ -119,7 +119,17 @@ function New-passwordString {
             throw "Word count must be between 2 and 10 for passphrase generation"
         }
 
-        $Words = @(Get-Content (Join-Path $env:CIPPRootPath 'Config\words.txt') -Encoding UTF8 | Where-Object { $_.Length -gt 0 -and $_ -match '^[a-zA-Z]+$' })
+        # PSIT-CUSTOM-BEGIN: the passphrase language is a setting (password-config screen);
+        # French draws from the PSIT wordlist, and a missing file falls back to the upstream
+        # English list rather than failing a password reset over a packaging accident.
+        $WordsPath = if ("$($Settings.passphraseLanguage)" -eq 'french') {
+            Join-Path $env:CIPPRootPath 'Config\psit-mots.txt'
+        } else {
+            Join-Path $env:CIPPRootPath 'Config\words.txt'
+        }
+        if (-not (Test-Path $WordsPath)) { $WordsPath = Join-Path $env:CIPPRootPath 'Config\words.txt' }
+        $Words = @(Get-Content $WordsPath -Encoding UTF8 | Where-Object { $_.Length -gt 0 -and $_ -match '^[a-zA-Z]+$' })
+        # PSIT-CUSTOM-END
         $wordPool = [System.Collections.Generic.List[string]]::new()
         $Words | ForEach-Object { $wordPool.Add($_) }
         $SelectedWords = @(1..$WordCount | ForEach-Object {

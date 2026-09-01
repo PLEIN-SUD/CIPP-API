@@ -30,6 +30,9 @@ function Invoke-ExecPasswordConfig {
                     capitalizeWords     = $false
                     appendNumber        = $false
                     appendSpecialChar   = $false
+                    # PSIT-CUSTOM-BEGIN: passphrase language
+                    passphraseLanguage  = 'english'
+                    # PSIT-CUSTOM-END
                 }
             } else {
                 # Migrate legacy 'Correct-Battery-Horse' type to 'Passphrase'
@@ -52,6 +55,9 @@ function Invoke-ExecPasswordConfig {
                     capitalizeWords     = if ($null -ne $PasswordSettings.capitalizeWords) { [bool]$PasswordSettings.capitalizeWords } else { $false }
                     appendNumber        = if ($null -ne $PasswordSettings.appendNumber) { [bool]$PasswordSettings.appendNumber } else { $false }
                     appendSpecialChar   = if ($null -ne $PasswordSettings.appendSpecialChar) { [bool]$PasswordSettings.appendSpecialChar } else { $false }
+                    # PSIT-CUSTOM-BEGIN: passphrase language
+                    passphraseLanguage  = if ("$($PasswordSettings.passphraseLanguage)" -eq 'french') { 'french' } else { 'english' }
+                    # PSIT-CUSTOM-END
                 }
 
                 # Persist migrated config so legacy type is upgraded in storage
@@ -172,6 +178,14 @@ function Invoke-ExecPasswordConfig {
                 }
             }
 
+            # PSIT-CUSTOM-BEGIN: passphrase language - two known lists, anything else is a typo to reject
+            $passphraseLanguage = if ($null -ne $Request.Body.passphraseLanguage) { "$($Request.Body.passphraseLanguage)".ToLowerInvariant() } else { 'english' }
+            if ($passphraseLanguage -notin @('english', 'french')) {
+                $StatusCode = [HttpStatusCode]::BadRequest
+                throw 'Passphrase language must be english or french'
+            }
+            # PSIT-CUSTOM-END
+
             # Microsoft 365 complexity validation: at least 3 of 4 character types
             if ($pwType -eq 'Classic') {
                 $enabledCount = 0
@@ -225,6 +239,9 @@ function Invoke-ExecPasswordConfig {
                 'capitalizeWords'     = $capitalizeWords
                 'appendNumber'        = $appendNumber
                 'appendSpecialChar'   = $appendSpecialChar
+                # PSIT-CUSTOM-BEGIN: passphrase language
+                'passphraseLanguage'  = $passphraseLanguage
+                # PSIT-CUSTOM-END
             }
 
             Add-CIPPAzDataTableEntity @Table -Entity $PasswordConfig -Force | Out-Null
